@@ -18,10 +18,15 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from mistralai.client import Mistral
-from report_engine import (
-    KapsulReportEngine, ReportData, ReportSection, SchoolConfig, SKEMA_CONFIG
-)
 from pptx import Presentation
+
+try:
+    from report_engine import (
+        KapsulReportEngine, ReportData, ReportSection, SchoolConfig, SKEMA_CONFIG
+    )
+    REPORT_ENGINE_AVAILABLE = True
+except ImportError:
+    REPORT_ENGINE_AVAILABLE = False
 from pydantic import BaseModel
 
 load_dotenv(".env.local")
@@ -401,6 +406,7 @@ def health():
         "mistral": bool(api_key),
         "timeout_ms": MISTRAL_TIMEOUT_MS,
         "synthesis_model": MISTRAL_SYNTHESIS_MODEL,
+        "report_engine": REPORT_ENGINE_AVAILABLE,
     }
 
 
@@ -666,6 +672,15 @@ async def chat(session_id: str, body: ChatRequest):
 @app.post("/api/report/{session_id}")
 async def generate_report(session_id: str, body: GenerateReportRequest):
     """Generate a branded PDF report from session RAG content."""
+    if not REPORT_ENGINE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Report engine not available. Add report_engine.py to the project root "
+                "and install reportlab (see requirements.txt)."
+            ),
+        )
+
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

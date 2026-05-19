@@ -6,3 +6,4 @@ pymupdf
 python-docx
 python-pptx
 python-dotenv
+reportlab
