@@ -122,4 +122,30 @@ export function streamChat(sessionId, message, history, { onToken, onDone, onErr
     .catch((e) => onError?.(e));
 }
 
+/**
+ * generateReport — calls /api/report/{sessionId} and triggers a browser download.
+ * @param {string} sessionId
+ * @param {object} reportData — { title, subtitle, student, course, professor, sections }
+ */
+export async function generateReport(sessionId, reportData) {
+  const res = await apiFetch(`/api/report/${sessionId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reportData),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(formatApiError(err, `Report generation failed (${res.status})`, res.status));
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Kapsul_${(reportData.title || 'report').slice(0, 40).replace(/\s+/g, '_')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export const SESSION_STORAGE_KEY = 'kapsul_chat_session';

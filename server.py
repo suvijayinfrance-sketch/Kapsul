@@ -16,8 +16,11 @@ from docx import Document
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from mistralai.client import Mistral
+from report_engine import (
+    KapsulReportEngine, ReportData, ReportSection, SchoolConfig, SKEMA_CONFIG
+)
 from pptx import Presentation
 from pydantic import BaseModel
 
@@ -364,6 +367,33 @@ class ChatRequest(BaseModel):
     history: list[dict[str, str]] = []
 
 
+class ReportSubsectionRequest(BaseModel):
+    title:   str
+    content: str = ""
+    bullets: list[str] = []
+    table:   list[list[str]] = []
+
+
+class ReportSectionRequest(BaseModel):
+    title:       str
+    content:     str = ""
+    bullets:     list[str] = []
+    table:       list[list[str]] = []
+    subsections: list[ReportSubsectionRequest] = []
+
+
+class GenerateReportRequest(BaseModel):
+    title:           str
+    subtitle:        str = ""
+    student:         str = ""
+    course:          str = ""
+    professor:       str = ""
+    sections:        list[ReportSectionRequest] = []
+    school_name:     str = ""
+    school_primary:  str = ""
+    school_initials: str = ""
+
+
 @app.get("/api/health")
 def health():
     return {
@@ -630,4 +660,90 @@ async def chat(session_id: str, body: ChatRequest):
         generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/report/{session_id}")
+async def generate_report(session_id: str, body: GenerateReportRequest):
+    """Generate a branded PDF report from session RAG content."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    cfg = SchoolConfig(
+        school_name    = body.school_name    or SKEMA_CONFIG.school_name,
+        primary        = body.school_primary or SKEMA_CONFIG.primary,
+        logo_initials  = body.school_initials or SKEMA_CONFIG.logo_initials,
+        secondary      = SKEMA_CONFIG.secondary,
+        accent         = SKEMA_CONFIG.accent,
+        muted          = SKEMA_CONFIG.muted,
+        border         = SKEMA_CONFIG.border,
+        school_subtitle= SKEMA_CONFIG.school_subtitle,
+        school_website = SKEMA_CONFIG.school_website,
+        footer_left    = "Kapsul AI Platform",
+    )
+
+    sections = []
+    for s in body.sections:
+        sections.append(ReportSection(
+            title       = s.title,
+            content     = s.content,
+            bullets     = s.bullets,
+            table       = s.table if s.table and len(s.table) > 1 else None,
+            subsections = [
+                ReportSection(
+                    title   = sub.title,
+                    content = sub.content,
+                    bullets = sub.bullets,
+                    table   = sub.table if sub.table and len(sub.table) > 1 else None,
+                )
+                for sub in s.subsections
+            ],
+        ))
+
+    if not sections and session.get("master_md"):
+        md = session["master_md"]
+        current_title   = "Synthèse"
+        current_content = []
+        for line in md.split("\n"):
+            if line.startswith("## "):
+                if current_content:
+                    sections.append(ReportSection(
+                        title   = current_title,
+                        content = "\n\n".join(current_content).strip(),
+                    ))
+                current_title   = line[3:].strip()
+                current_content = []
+            elif line.startswith("# "):
+                pass
+            else:
+                if line.strip():
+                    current_content.append(line.strip())
+        if current_content:
+            sections.append(ReportSection(
+                title   = current_title,
+                content = "\n\n".join(current_content).strip(),
+            ))
+
+    report = ReportData(
+        title       = body.title or "Rapport de Cours",
+        subtitle    = body.subtitle,
+        student     = body.student,
+        course      = body.course,
+        professor   = body.professor,
+        doc_sources = session.get("files", []),
+        sections    = sections,
+    )
+
+    try:
+        engine    = KapsulReportEngine(school_config=cfg)
+        pdf_bytes = engine.generate(report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}") from e
+
+    safe_title = (body.title or "rapport")[:40].replace(" ", "_").replace("/", "_")
+    return Response(
+        content    = pdf_bytes,
+        media_type = "application/pdf",
+        headers    = {"Content-Disposition": f'attachment; filename="Kapsul_{safe_title}.pdf"'},
     )
