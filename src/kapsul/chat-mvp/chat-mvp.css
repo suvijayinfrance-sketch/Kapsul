@@ -1,0 +1,128 @@
+@keyframes kapsul-mvp-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes kapsul-mvp-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes kapsul-mvp-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes kapsul-mvp-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.kapsul-mvp-pulse-orb {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4, #f97316, #7c3aed);
+  background-size: 300% 300%;
+  animation: kapsul-mvp-gradient 3s ease infinite, kapsul-mvp-pulse 2s ease-in-out infinite;
+}
+
+.kapsul-mvp-step-in {
+  animation: kapsulFadeIn 0.4s ease forwards;
+  opacity: 0;
+}
+
+.kapsul-mvp-cursor {
+  animation: kapsul-mvp-blink 1s step-end infinite;
+}
+
+.kapsul-mvp-typing-dot {
+  animation: kapsul-mvp-dot 1.2s ease-in-out infinite;
+}
+
+.kapsul-mvp-typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.kapsul-mvp-typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.kapsul-mvp-md h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.kapsul-mvp-md h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--mvp-border, #2a2a3a);
+}
+
+.kapsul-mvp-md h3 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 14px 0 6px;
+  opacity: 0.75;
+}
+
+.kapsul-mvp-md p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0 0 10px;
+}
+
+.kapsul-mvp-md ul,
+.kapsul-mvp-md ol {
+  font-size: 13px;
+  line-height: 1.65;
+  padding-left: 18px;
+  margin: 0 0 10px;
+}
+
+.kapsul-mvp-md code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.kapsul-mvp-md blockquote {
+  border-left: 3px solid #7c3aed;
+  padding-left: 12px;
+  margin: 8px 0;
+  opacity: 0.85;
+}

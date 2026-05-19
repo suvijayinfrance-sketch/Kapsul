@@ -1,0 +1,14 @@
+# Deploy backend on Render: https://render.com
+# Dashboard → New → Blueprint → connect this repo (or create Web Service manually)
+services:
+  - type: web
+    name: kapsul-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13.0"
