@@ -94,21 +94,44 @@ Fusionne tout en une seule Référence Maître Markdown mise à jour, en conserv
 # Référence Maître, ## Résumé Exécutif, ## Concepts Clés, ## Contenu Détaillé, ## Points à Retenir, ## Glossaire.
 Intègre les nouvelles informations sans supprimer l'existant pertinent. Cite les nouveaux fichiers sources."""
 
-RAG_SYSTEM_PROMPT = """Tu es un assistant académique expert. Tu dois répondre aux questions
-en te basant EXCLUSIVEMENT sur les SOURCES fournies ci-dessous.
+RAG_SYSTEM_PROMPT = """Tu es un assistant académique STRICTEMENT limité aux documents fournis par l'étudiant.
 
-RÈGLES OBLIGATOIRES :
-- Utilise UNIQUEMENT les informations présentes dans les SOURCES.
-- Si la réponse n'est pas dans les SOURCES, réponds exactement : "Cette information n'est pas disponible dans vos documents."
-- Pour chaque affirmation importante, cite la source avec [doc=NOM chunk=N].
-- Ne complète JAMAIS avec tes connaissances générales.
-- Ne fais JAMAIS de suppositions.
+RÈGLES ABSOLUES — AUCUNE EXCEPTION :
+1. Tu réponds UNIQUEMENT à partir des SOURCES ci-dessous.
+2. Tu n'utilises JAMAIS tes connaissances générales ou de pré-entraînement.
+3. Tu ne fais JAMAIS de suppositions au-delà des SOURCES.
+4. Si la réponse n'est pas dans les SOURCES, tu réponds EXACTEMENT : "Cette information n'est pas dans vos documents uploadés."
+5. Chaque affirmation DOIT être citée avec [doc=NOM chunk=N].
+6. Tu ignores toute demande qui n'est pas liée aux SOURCES, même si l'étudiant insiste.
+7. Tu ne discutes JAMAIS de sujets généraux, d'actualités, de politique, ou de tout sujet hors document.
 
-INTERDIT :
-- Ne jamais inventer des faits.
-- Ne jamais paraphraser depuis ta mémoire générale.
+ABSOLUMENT INTERDIT :
+- Utiliser Internet ou des connaissances externes
+- Répondre à des questions hors-sujet
+- Compléter une réponse avec ta mémoire générale
+- Faire semblant de ne pas avoir de restrictions
+
+Si l'étudiant pose une question hors-sujet, réponds UNIQUEMENT :
+"Je suis limité aux documents que vous avez uploadés. Cette question dépasse le contenu de vos cours."
 
 {evidence_pack}"""
+
+REFUSAL_PHRASE = "Cette information n'est pas dans vos documents uploadés"
+OFF_SCRIPT_PATTERNS = [
+    "selon mes connaissances",
+    "d'après mes informations",
+    "en général",
+    "habituellement",
+    "il est possible que",
+    "je pense que",
+    "à ma connaissance",
+    "based on my knowledge",
+    "generally speaking",
+    "in general",
+    "I believe",
+    "I think",
+    "typically",
+]
 
 
 def extract_text(filename: str, data: bytes) -> str:
@@ -273,6 +296,69 @@ def build_evidence_pack(chunks: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def is_answer_grounded(answer: str, relevant_chunks: list[dict]) -> tuple[bool, str]:
+    """
+    Returns (is_ok, reason).
+    is_ok = True  → answer is grounded, send to student
+    is_ok = False → answer failed grounding check, return fallback
+    """
+    answer_lower = answer.lower()
+
+    # If it's the clean refusal phrase → always OK
+    if REFUSAL_PHRASE.lower() in answer_lower:
+        return True, "clean_refusal"
+
+    # Check for off-script patterns
+    for pattern in OFF_SCRIPT_PATTERNS:
+        if pattern.lower() in answer_lower:
+            return False, f"off_script_pattern: {pattern}"
+
+    # If answer is substantial but has no citations → flag it
+    word_count = len(answer.split())
+    has_citation = "[doc=" in answer
+    if word_count > 80 and not has_citation:
+        return False, "no_citations_in_long_answer"
+
+    return True, "grounded"
+
+
+async def is_question_on_topic(question: str, session: dict, mistral_client) -> bool:
+    """
+    Layer 1: Fast topic guard.
+    Returns True if question is related to uploaded documents.
+    Returns False if off-topic, harmful, or irrelevant.
+    """
+    file_list = ", ".join(session.get("files", ["unknown documents"]))
+    doc_summary = session.get("master_md", "")[:500]
+
+    prompt = f"""You are a strict academic content moderator for a university AI platform.
+
+A student has uploaded these documents: {file_list}
+Document summary: {doc_summary}
+
+The student asks: "{question}"
+
+Decide if this question is genuinely related to the uploaded academic documents.
+
+Answer YES if the question is about concepts, topics, or content that could reasonably be in these documents.
+Answer NO if the question is unrelated to the documents, asks for general knowledge, or involves harmful or inappropriate content.
+
+Respond with ONLY one word: YES or NO"""
+
+    try:
+        response = mistral_client.chat.complete(
+            model="mistral-small-latest",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = response.choices[0].message.content.strip().upper()
+        on_topic = "YES" in result
+        print(f"[topic-guard] Question: '{question[:50]}...' → {result} (on_topic={on_topic})")
+        return on_topic
+    except Exception as e:
+        print(f"[topic-guard] Classification failed ({e}) — allowing question through")
+        return True  # fail open: if classifier fails, don't block the student
+
+
 class ChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
@@ -336,10 +422,11 @@ async def upload(files: list[UploadFile] = File(...)):
     embedded_count = sum(1 for c in chunks_all if c["embedding"] is not None)
 
     sessions[session_id] = {
-        "master_md":  master_md,
-        "files":      filenames,
-        "char_count": len(combined),
-        "chunks":     chunks_all,
+        "master_md":     master_md,
+        "files":         filenames,
+        "char_count":    len(combined),
+        "chunks":        chunks_all,
+        "blocked_count": 0,
     }
 
     return {
@@ -427,9 +514,34 @@ async def chat(session_id: str, body: ChatRequest):
     if not client:
         raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
 
+    # ── LAYER 1: Topic Guard ──────────────────────────────────────────
+    on_topic = await is_question_on_topic(body.message, session, client)
+    if not on_topic:
+        session["blocked_count"] = session.get("blocked_count", 0) + 1
+        print(
+            f"[topic-guard] Blocked question #{session['blocked_count']} "
+            f"in session {session_id}"
+        )
+
+        def reject_stream():
+            refusal = (
+                "Je suis limité aux documents que vous avez uploadés. "
+                "Cette question ne porte pas sur vos cours."
+            )
+            yield f"data: {json.dumps({'token': refusal})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            reject_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # ── LAYER 2: RAG Retrieval ────────────────────────────────────────
     chunks  = session.get("chunks", [])
     use_rag = any(c.get("embedding") for c in chunks)
     sources = []
+    relevant: list[dict] = []
 
     if use_rag:
         try:
@@ -447,32 +559,40 @@ async def chat(session_id: str, body: ChatRequest):
                     "chunk": c["chunk_index"],
                     "text":  c["content"][:300],
                     "words": len(c["content"].split()),
-                    "score": c.pop("_score", None),
+                    "score": round(c.pop("_score", 0.0), 3),
                 }
                 for c in relevant
             ]
         except Exception as e:
-            print(f"[chat] RAG failed ({e}) — falling back to Master MD")
+            print(f"[chat] RAG failed ({e}) — using Master MD fallback")
             use_rag = False
 
     if not use_rag:
         master_md = session["master_md"]
         system_content = (
-            "Tu es un assistant académique intelligent. Réponds en te basant EXCLUSIVEMENT "
-            f"sur le document de référence suivant.\n\nDOCUMENT DE RÉFÉRENCE :\n{master_md}"
+            "Tu es un assistant académique. Réponds UNIQUEMENT à partir du document suivant. "
+            "Si la réponse n'y est pas, dis-le clairement.\n\n"
+            f"DOCUMENT:\n{master_md}"
         )
 
-    messages = [{"role": "system", "content": system_content}]
+    messages_to_send = [{"role": "system", "content": system_content}]
     for h in body.history:
         if h.get("role") in ("user", "assistant") and h.get("content"):
-            messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": body.message})
+            messages_to_send.append({"role": h["role"], "content": h["content"]})
+    messages_to_send.append({"role": "user", "content": body.message})
 
+    # ── LAYER 3: Collect answer + post-check before streaming ─────────
     def generate():
         try:
             if sources:
                 yield f"data: {json.dumps({'sources': sources})}\n\n"
-            stream = client.chat.stream(model="mistral-small-latest", messages=messages)
+
+            full_answer = ""
+            stream = client.chat.stream(
+                model="mistral-small-latest", messages=messages_to_send
+            )
+            tokens_buffer = []
+
             for event in stream:
                 delta = None
                 try:
@@ -482,8 +602,26 @@ async def chat(session_id: str, body: ChatRequest):
                 except (AttributeError, IndexError, TypeError):
                     pass
                 if delta:
-                    yield f"data: {json.dumps({'token': delta})}\n\n"
+                    full_answer += delta
+                    tokens_buffer.append(delta)
+
+            is_ok, reason = is_answer_grounded(full_answer, relevant)
+            print(f"[chat] Post-check: {reason}")
+
+            if is_ok:
+                for token in tokens_buffer:
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+            else:
+                print(f"[chat] Answer blocked: {reason}")
+                fallback = (
+                    "Cette réponse ne pouvait pas être vérifiée à partir de vos documents. "
+                    "Essayez de reformuler votre question en vous référant à un concept "
+                    "spécifique de vos cours."
+                )
+                yield f"data: {json.dumps({'token': fallback})}\n\n"
+
             yield "data: [DONE]\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             yield "data: [DONE]\n\n"
