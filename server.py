@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import time
 import uuid
 from io import BytesIO
@@ -463,6 +464,7 @@ async def upload(files: list[UploadFile] = File(...)):
         "char_count":    len(combined),
         "chunks":        chunks_all,
         "blocked_count": 0,
+        "messages":        [],
     }
 
     return {
@@ -641,6 +643,11 @@ async def chat(session_id: str, body: ChatRequest):
                     full_answer += delta
                     tokens_buffer.append(delta)
 
+            if "messages" not in session:
+                session["messages"] = []
+            session["messages"].append({"role": "user", "content": body.message})
+            session["messages"].append({"role": "assistant", "content": full_answer})
+
             is_ok, reason = is_answer_grounded(full_answer, relevant)
             print(f"[chat] Post-check: {reason}")
 
@@ -671,7 +678,11 @@ async def chat(session_id: str, body: ChatRequest):
 
 @app.post("/api/report/{session_id}")
 async def generate_report(session_id: str, body: GenerateReportRequest):
-    """Generate a branded PDF report from session RAG content."""
+    """
+    Generate a branded PDF report.
+
+    Uses chat history + master_md → Mistral structures JSON → ReportLab PDF.
+    """
     if not REPORT_ENGINE_AVAILABLE:
         raise HTTPException(
             status_code=503,
@@ -684,6 +695,107 @@ async def generate_report(session_id: str, body: GenerateReportRequest):
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not client:
+        raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
+
+    from report_engine import clean_markdown as _clean, parse_markdown_to_sections
+
+    chat_messages = session.get("messages", [])
+    master_md     = session.get("master_md", "")
+    doc_sources   = session.get("files", [])
+
+    chat_context = ""
+    if chat_messages:
+        qa_pairs = []
+        for i in range(0, len(chat_messages) - 1, 2):
+            if i + 1 < len(chat_messages):
+                q = chat_messages[i].get("content", "").strip()
+                a = chat_messages[i + 1].get("content", "").strip()
+                if q and a:
+                    qa_pairs.append(f"Q: {q}\nR: {a}")
+        chat_context = "\n\n".join(qa_pairs)
+
+    report_prompt = f"""Tu es un assistant académique expert. 
+Tu dois créer un rapport de cours structuré et professionnel à partir de :
+1. La référence maître du cours (documents uploadés par l'étudiant)
+2. La conversation de chat entre l'étudiant et l'IA (les questions posées et les réponses données)
+
+RÉFÉRENCE MAÎTRE :
+{master_md[:8000]}
+
+CONVERSATION DE CHAT (questions et réponses) :
+{chat_context[:4000] if chat_context else "Pas de conversation disponible — utiliser uniquement la référence maître."}
+
+INSTRUCTIONS :
+- Crée un rapport académique professionnel qui synthétise CE QUE L'ÉTUDIANT A APPRIS
+- Intègre les insights de la conversation (ce que l'étudiant a demandé, ce qu'il a compris)
+- Structure en 4-6 sections logiques
+- Pour chaque section : un titre clair, un paragraphe de contenu, des points clés en bullets
+- Le contenu doit être en TEXTE BRUT — pas de Markdown, pas de **, pas de ###, pas de ---
+- Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
+
+{{
+  "report_title": "titre du rapport déduit du contenu",
+  "sections": [
+    {{
+      "title": "titre de la section",
+      "content": "paragraphe de contenu en texte brut sans aucun Markdown",
+      "bullets": ["point clé 1", "point clé 2", "point clé 3"],
+      "subsections": [
+        {{
+          "title": "titre sous-section (optionnel)",
+          "content": "contenu sous-section en texte brut",
+          "bullets": ["point 1", "point 2"]
+        }}
+      ]
+    }}
+  ]
+}}
+
+RÈGLES IMPORTANTES :
+- content et bullets DOIVENT être en texte brut pur — AUCUN symbole Markdown
+- Chaque section doit avoir au moins 2 bullets
+- Maximum 6 sections, minimum 3
+- Les bullets doivent être des phrases complètes et informatives
+- Réponds UNIQUEMENT avec le JSON — aucun texte avant ou après"""
+
+    try:
+        response = client.chat.complete(
+            model="mistral-large-latest",
+            messages=[{"role": "user", "content": report_prompt}],
+            timeout_ms=MISTRAL_TIMEOUT_MS,
+        )
+        raw_json = response.choices[0].message.content or "{}"
+
+        raw_json = re.sub(r'^```(?:json)?\s*', '', raw_json.strip())
+        raw_json = re.sub(r'\s*```$', '', raw_json.strip())
+
+        report_json = json.loads(raw_json)
+    except json.JSONDecodeError as e:
+        print(f"[report] JSON parse failed ({e}) — falling back to master_md parser")
+        parsed = parse_markdown_to_sections(master_md)
+        report_json = {
+            "report_title": body.title or "Rapport de Cours",
+            "sections": parsed,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Report AI generation failed: {e}") from e
+
+    sections = []
+    for s in report_json.get("sections", []):
+        subsections = []
+        for sub in s.get("subsections", []):
+            subsections.append(ReportSection(
+                title   = _clean(sub.get("title", "")),
+                content = _clean(sub.get("content", "")),
+                bullets = [_clean(b) for b in sub.get("bullets", []) if b],
+            ))
+        sections.append(ReportSection(
+            title       = _clean(s.get("title", "Section")),
+            content     = _clean(s.get("content", "")),
+            bullets     = [_clean(b) for b in s.get("bullets", []) if b],
+            subsections = subsections,
+        ))
 
     cfg = SchoolConfig(
         school_name    = body.school_name    or SKEMA_CONFIG.school_name,
@@ -698,65 +810,30 @@ async def generate_report(session_id: str, body: GenerateReportRequest):
         footer_left    = "Kapsul AI Platform",
     )
 
-    sections = []
-    for s in body.sections:
-        sections.append(ReportSection(
-            title       = s.title,
-            content     = s.content,
-            bullets     = s.bullets,
-            table       = s.table if s.table and len(s.table) > 1 else None,
-            subsections = [
-                ReportSection(
-                    title   = sub.title,
-                    content = sub.content,
-                    bullets = sub.bullets,
-                    table   = sub.table if sub.table and len(sub.table) > 1 else None,
-                )
-                for sub in s.subsections
-            ],
-        ))
-
-    if not sections and session.get("master_md"):
-        md = session["master_md"]
-        current_title   = "Synthèse"
-        current_content = []
-        for line in md.split("\n"):
-            if line.startswith("## "):
-                if current_content:
-                    sections.append(ReportSection(
-                        title   = current_title,
-                        content = "\n\n".join(current_content).strip(),
-                    ))
-                current_title   = line[3:].strip()
-                current_content = []
-            elif line.startswith("# "):
-                pass
-            else:
-                if line.strip():
-                    current_content.append(line.strip())
-        if current_content:
-            sections.append(ReportSection(
-                title   = current_title,
-                content = "\n\n".join(current_content).strip(),
-            ))
+    inferred_title = report_json.get("report_title", body.title or "Rapport de Cours")
+    num_exchanges  = len(chat_messages) // 2
 
     report = ReportData(
-        title       = body.title or "Rapport de Cours",
-        subtitle    = body.subtitle,
-        student     = body.student,
-        course      = body.course,
-        professor   = body.professor,
-        doc_sources = session.get("files", []),
-        sections    = sections,
+        title        = body.title or inferred_title,
+        subtitle     = body.subtitle or (
+            f"Basé sur {len(doc_sources)} document(s) · {num_exchanges} échange(s) de chat"
+            if num_exchanges > 0
+            else f"Basé sur {len(doc_sources)} document(s)"
+        ),
+        student      = body.student,
+        course       = body.course,
+        professor    = body.professor,
+        doc_sources  = doc_sources,
+        sections     = sections,
     )
 
     try:
         engine    = KapsulReportEngine(school_config=cfg)
         pdf_bytes = engine.generate(report)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}") from e
+        raise HTTPException(status_code=500, detail=f"PDF render failed: {e}") from e
 
-    safe_title = (body.title or "rapport")[:40].replace(" ", "_").replace("/", "_")
+    safe_title = (report.title)[:40].replace(" ", "_").replace("/", "_")
     return Response(
         content    = pdf_bytes,
         media_type = "application/pdf",

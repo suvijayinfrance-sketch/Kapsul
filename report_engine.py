@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Optional
@@ -19,6 +20,133 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+
+def clean_markdown(text: str) -> str:
+    """
+    Convert raw Markdown text to clean plain text safe for ReportLab Paragraph rendering.
+
+    ReportLab Paragraph supports only a small subset of XML tags:
+    <b>, <i>, <u>, <br/>, <bullet>. It does NOT support Markdown syntax.
+    This function strips all Markdown and returns clean readable text.
+    """
+    if not text:
+        return ""
+
+    text = re.sub(r'\n---+\n', '\n', text)
+    text = re.sub(r'\n\*\*\*+\n', '\n', text)
+    text = re.sub(r'\n___+\n', '\n', text)
+
+    text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+    text = re.sub(r'!\[.*?\]\(.+?\)', '', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text.strip()
+
+
+def extract_bullets_from_markdown(text: str) -> tuple[list[str], str]:
+    """
+    Extract bullet point lines from Markdown text.
+    Returns (bullets_list, remaining_text_without_bullets).
+    """
+    bullets = []
+    remaining_lines = []
+
+    for line in text.split('\n'):
+        bullet_match = re.match(r'^\s*[-*+■]\s+(.+)', line)
+        numbered_match = re.match(r'^\s*\d+\.\s+(.+)', line)
+
+        if bullet_match:
+            bullets.append(clean_markdown(bullet_match.group(1).strip()))
+        elif numbered_match:
+            bullets.append(clean_markdown(numbered_match.group(1).strip()))
+        else:
+            remaining_lines.append(line)
+
+    remaining = clean_markdown('\n'.join(remaining_lines))
+    return bullets, remaining
+
+
+def parse_markdown_to_sections(md_text: str) -> list[dict]:
+    """
+    Parse a Markdown document into a list of sections.
+    Each section: { title, content, bullets, subsections: [{title, content, bullets}] }
+    """
+    sections = []
+    current_section = None
+    current_subsection = None
+    current_lines = []
+
+    def flush_subsection():
+        nonlocal current_subsection, current_lines
+        if current_subsection and current_section:
+            bullets, content = extract_bullets_from_markdown('\n'.join(current_lines))
+            current_subsection['content'] = content
+            current_subsection['bullets'] = bullets
+            current_section['subsections'].append(current_subsection)
+        current_subsection = None
+        current_lines = []
+
+    def flush_section():
+        nonlocal current_section, current_lines, current_subsection
+        flush_subsection()
+        if current_section:
+            if current_lines:
+                bullets, content = extract_bullets_from_markdown('\n'.join(current_lines))
+                current_section['content'] = current_section.get('content', '') + content
+                current_section['bullets'] = current_section.get('bullets', []) + bullets
+            sections.append(current_section)
+        current_section = None
+        current_lines = []
+
+    for line in md_text.split('\n'):
+        if re.match(r'^#\s+', line):
+            continue
+        elif re.match(r'^##\s+', line):
+            flush_section()
+            title = re.sub(r'^##\s+', '', line).strip()
+            title = clean_markdown(title)
+            current_section = {
+                'title': title,
+                'content': '',
+                'bullets': [],
+                'subsections': []
+            }
+            current_lines = []
+        elif re.match(r'^###\s+', line):
+            flush_subsection()
+            if current_section:
+                if current_lines:
+                    bullets, content = extract_bullets_from_markdown('\n'.join(current_lines))
+                    current_section['content'] += content
+                    current_section['bullets'] += bullets
+                    current_lines = []
+                sub_title = re.sub(r'^###\s+', '', line).strip()
+                sub_title = clean_markdown(sub_title)
+                current_subsection = {
+                    'title': sub_title,
+                    'content': '',
+                    'bullets': []
+                }
+        elif re.match(r'^####\s+', line):
+            current_lines.append(re.sub(r'^####\s+', '', line).strip())
+        else:
+            current_lines.append(line)
+
+    flush_section()
+    return sections
 
 
 @dataclass
@@ -169,9 +297,10 @@ class KapsulReportEngine:
         story.append(Paragraph(self._esc(self.cfg.school_name), subtitle_style))
         story.append(Paragraph(self._esc(self.cfg.school_subtitle), meta_style))
         story.append(Spacer(1, 1.2 * cm))
-        story.append(Paragraph(self._esc(report.title), title_style))
+        story.append(Paragraph(self._esc(clean_markdown(report.title)), title_style))
         if report.subtitle:
-            story.append(Paragraph(self._esc(report.subtitle), subtitle_style))
+            for line in self._wrap_subtitle_lines(clean_markdown(report.subtitle)):
+                story.append(Paragraph(self._esc(line), subtitle_style))
 
         meta_lines = []
         if report.student:
@@ -215,23 +344,30 @@ class KapsulReportEngine:
         body_style: ParagraphStyle,
         bullet_style: ParagraphStyle,
     ) -> None:
-        story.append(Paragraph(self._esc(section.title), h1_style))
+        story.append(Paragraph(self._esc(clean_markdown(section.title)), h1_style))
         if section.content:
             for para in section.content.split("\n\n"):
-                text = para.strip()
+                text = clean_markdown(para.strip())
                 if text:
                     story.append(Paragraph(self._esc(text), body_style))
         for bullet in section.bullets:
-            story.append(Paragraph(f"• {self._esc(bullet)}", bullet_style))
+            story.append(
+                Paragraph(f"• {self._esc(clean_markdown(bullet))}", bullet_style)
+            )
         if section.table and len(section.table) > 1:
             story.append(self._build_table(section.table))
             story.append(Spacer(1, 0.3 * cm))
         for sub in section.subsections:
-            story.append(Paragraph(self._esc(sub.title), h2_style))
+            story.append(Paragraph(self._esc(clean_markdown(sub.title)), h2_style))
             if sub.content:
-                story.append(Paragraph(self._esc(sub.content), body_style))
+                for para in sub.content.split("\n\n"):
+                    text = clean_markdown(para.strip())
+                    if text:
+                        story.append(Paragraph(self._esc(text), body_style))
             for bullet in sub.bullets:
-                story.append(Paragraph(f"• {self._esc(bullet)}", bullet_style))
+                story.append(
+                    Paragraph(f"• {self._esc(clean_markdown(bullet))}", bullet_style)
+                )
             if sub.table and len(sub.table) > 1:
                 story.append(self._build_table(sub.table))
                 story.append(Spacer(1, 0.3 * cm))
@@ -280,6 +416,26 @@ class KapsulReportEngine:
         canvas.drawString(2 * cm, 0.5 * cm, self.cfg.school_website)
         canvas.drawRightString(w - 2 * cm, 0.9 * cm, f"Page {doc.page}")
         canvas.restoreState()
+
+    @staticmethod
+    def _wrap_subtitle_lines(subtitle: str, max_chars: int = 72) -> list[str]:
+        """Word-wrap subtitle for cover page (flowable layout)."""
+        words = subtitle.split()
+        if not words:
+            return []
+        lines: list[str] = []
+        current: list[str] = []
+        for word in words:
+            test = " ".join(current + [word]).strip()
+            if len(test) <= max_chars:
+                current.append(word)
+            else:
+                if current:
+                    lines.append(" ".join(current))
+                current = [word]
+        if current:
+            lines.append(" ".join(current))
+        return lines
 
     @staticmethod
     def _esc(text: str) -> str:
