@@ -74,11 +74,11 @@ export async function getSession(sessionId) {
   return res.json();
 }
 
-export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }) {
+export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = []) {
   apiFetch(`/api/chat/${sessionId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, enabled_sources: enabledSources }),
   })
     .then(async (res) => {
       if (!res.ok) {

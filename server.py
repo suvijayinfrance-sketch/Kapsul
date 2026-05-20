@@ -30,6 +30,8 @@ except ImportError:
     REPORT_ENGINE_AVAILABLE = False
 from pydantic import BaseModel
 
+from data_sources import detect_data_needs, fetch_all, format_data_for_prompt
+
 load_dotenv(".env.local")
 load_dotenv()
 
@@ -371,6 +373,7 @@ Respond with ONLY one word: YES or NO"""
 class ChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
+    enabled_sources: list[str] = []
 
 
 class ReportSubsectionRequest(BaseModel):
@@ -575,6 +578,19 @@ async def chat(session_id: str, body: ChatRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    # ── EXTERNAL DATA ENRICHMENT ──────────────────────────────────────────────
+    external_data_text = ""
+    if body.enabled_sources:
+        try:
+            tasks = detect_data_needs(body.message, body.enabled_sources)
+            if tasks:
+                print(f"[data] Fetching from {[t['source'] for t in tasks]}...")
+                results = await fetch_all(tasks)
+                external_data_text = format_data_for_prompt(results)
+                print(f"[data] Got {len(results)} data source(s)")
+        except Exception as e:
+            print(f"[data] External data fetch failed: {e}")
+
     # ── LAYER 2: RAG Retrieval ────────────────────────────────────────
     chunks  = session.get("chunks", [])
     use_rag = any(c.get("embedding") for c in chunks)
@@ -590,7 +606,7 @@ async def chat(session_id: str, body: ChatRequest):
             question_embedding = q_resp.data[0].embedding
             relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
             evidence       = build_evidence_pack(relevant)
-            system_content = RAG_SYSTEM_PROMPT.format(evidence_pack=evidence)
+            system_content = RAG_SYSTEM_PROMPT.format(evidence_pack=evidence) + external_data_text
             sources = [
                 {
                     "doc":   c["doc_name"],
@@ -611,7 +627,7 @@ async def chat(session_id: str, body: ChatRequest):
             "Tu es un assistant académique. Réponds UNIQUEMENT à partir du document suivant. "
             "Si la réponse n'y est pas, dis-le clairement.\n\n"
             f"DOCUMENT:\n{master_md}"
-        )
+        ) + external_data_text
 
     messages_to_send = [{"role": "system", "content": system_content}]
     for h in body.history:

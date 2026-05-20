@@ -41,6 +41,7 @@ export function ChatMvp() {
   const [reportTitle, setReportTitle] = useState('');
   const [reportStudent, setReportStudent] = useState('');
   const [reportCourse, setReportCourse] = useState('');
+  const [enabledSources, setEnabledSources] = useState([]);
   const addFilesInputRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -143,8 +144,8 @@ export function ChatMvp() {
         alert(e.message || 'Chat error');
         setMessages((m) => m.slice(0, -1));
       },
-    });
-  }, [sessionId, messages, streaming]);
+    }, enabledSources);
+  }, [sessionId, messages, streaming, enabledSources]);
 
   const handleGenerateReport = async () => {
     if (!sessionId || reportGenerating) return;
@@ -385,6 +386,14 @@ export function ChatMvp() {
           placeholder={fr ? 'Posez votre question...' : 'Ask your question...'}
           onSend={sendMessage}
           onAddFiles={handleAddFiles}
+          enabledSources={enabledSources}
+          onSourceToggle={(sourceId) => {
+            setEnabledSources((prev) =>
+              prev.includes(sourceId)
+                ? prev.filter((s) => s !== sourceId)
+                : [...prev, sourceId],
+            );
+          }}
         />
       </div>
 

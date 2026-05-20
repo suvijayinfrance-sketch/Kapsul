@@ -6,9 +6,19 @@ const ACCEPT = '.pdf,.docx,.pptx,.txt';
 
 export function ChatInputMvp({
   k, isV2, v, placeholder, onSend, onAddFiles, disabled, lang, attachDisabled,
+  enabledSources = [], onSourceToggle,
 }) {
   const [text, setText] = useState('');
   const fileRef = useRef(null);
+  const fr = lang === 'fr';
+
+  const DATA_SOURCES = [
+    { id: 'entreprises', label: 'Entreprises FR', emoji: '🏢', group: 'french', color: '#003F7D' },
+    { id: 'bodacc', label: 'BODACC', emoji: '📋', group: 'french', color: '#003F7D' },
+    { id: 'worldbank', label: 'World Bank', emoji: '🌍', group: 'economic', color: '#2563EB' },
+    { id: 'eurostat', label: 'Eurostat', emoji: '🇪🇺', group: 'economic', color: '#2563EB' },
+    { id: 'oecd', label: 'OECD', emoji: '📊', group: 'economic', color: '#2563EB' },
+  ];
 
   const send = () => {
     const trimmed = text.trim();
@@ -46,6 +56,121 @@ export function ChatInputMvp({
             <Badge v={v} tone="cyan" mono>SMART</Badge>
           </div>
         )}
+
+        {/* Data Source Tickers */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 16px 4px',
+          borderBottom: `1px solid ${k.border}`,
+          flexWrap: 'wrap',
+          background: isV2 ? 'rgba(0,0,0,0.15)' : '#FAFAFA',
+        }}>
+          <span style={{
+            fontSize: 10, fontWeight: 600, color: k.textMuted,
+            textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4,
+            whiteSpace: 'nowrap',
+          }}>
+            {fr ? 'Sources :' : 'Sources:'}
+          </span>
+
+          <span style={{ fontSize: 9, color: k.textMuted, fontWeight: 500 }}>
+            {fr ? 'Données FR' : 'French Data'}
+          </span>
+          {DATA_SOURCES.filter((s) => s.group === 'french').map((source) => {
+            const active = enabledSources.includes(source.id);
+            return (
+              <button
+                key={source.id}
+                type="button"
+                onClick={() => onSourceToggle?.(source.id)}
+                title={active ? `Désactiver ${source.label}` : `Activer ${source.label}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s',
+                  border: `1.5px solid ${active ? source.color : k.border}`,
+                  background: active
+                    ? (isV2 ? 'rgba(0,63,125,0.25)' : '#EFF6FF')
+                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
+                  color: active ? source.color : k.textMuted,
+                }}
+              >
+                <span style={{ fontSize: 12 }}>{source.emoji}</span>
+                {source.label}
+                {active && (
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: source.color, display: 'inline-block', marginLeft: 2,
+                  }} />
+                )}
+              </button>
+            );
+          })}
+
+          <span style={{ color: k.border, fontSize: 14 }}>|</span>
+
+          <span style={{ fontSize: 9, color: k.textMuted, fontWeight: 500 }}>
+            {fr ? 'Données Éco' : 'Economic Data'}
+          </span>
+          {DATA_SOURCES.filter((s) => s.group === 'economic').map((source) => {
+            const active = enabledSources.includes(source.id);
+            return (
+              <button
+                key={source.id}
+                type="button"
+                onClick={() => onSourceToggle?.(source.id)}
+                title={active ? `Désactiver ${source.label}` : `Activer ${source.label}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s',
+                  border: `1.5px solid ${active ? source.color : k.border}`,
+                  background: active
+                    ? (isV2 ? 'rgba(37,99,235,0.2)' : '#EFF6FF')
+                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
+                  color: active ? source.color : k.textMuted,
+                }}
+              >
+                <span style={{ fontSize: 12 }}>{source.emoji}</span>
+                {source.label}
+                {active && (
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: source.color, display: 'inline-block', marginLeft: 2,
+                  }} />
+                )}
+              </button>
+            );
+          })}
+
+          {enabledSources.length > 0 && (
+            <span style={{
+              marginLeft: 'auto',
+              fontSize: 10,
+              color: '#16A34A',
+              fontWeight: 600,
+            }}>
+              {enabledSources.length} {fr ? 'active(s)' : 'active'}
+            </span>
+          )}
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 12px' }}>
           <input
             ref={fileRef}
