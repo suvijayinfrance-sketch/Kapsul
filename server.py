@@ -556,27 +556,33 @@ async def chat(session_id: str, body: ChatRequest):
         raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
 
     # ── LAYER 1: Topic Guard ──────────────────────────────────────────
-    on_topic = await is_question_on_topic(body.message, session, client)
-    if not on_topic:
-        session["blocked_count"] = session.get("blocked_count", 0) + 1
-        print(
-            f"[topic-guard] Blocked question #{session['blocked_count']} "
-            f"in session {session_id}"
-        )
+    # Skip topic guard entirely if the student has enabled external data sources.
+    # When sources are active, the student is explicitly requesting external data —
+    # that is a legitimate academic research request, not an off-topic question.
+    has_active_sources = len(body.enabled_sources) > 0
 
-        def reject_stream():
-            refusal = (
-                "Je suis limité aux documents que vous avez uploadés. "
-                "Cette question ne porte pas sur vos cours."
+    if not has_active_sources:
+        on_topic = await is_question_on_topic(body.message, session, client)
+        if not on_topic:
+            session["blocked_count"] = session.get("blocked_count", 0) + 1
+            print(
+                f"[topic-guard] Blocked question #{session['blocked_count']} "
+                f"in session {session_id}"
             )
-            yield f"data: {json.dumps({'token': refusal})}\n\n"
-            yield "data: [DONE]\n\n"
 
-        return StreamingResponse(
-            reject_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+            def reject_stream():
+                refusal = (
+                    "Je suis limité aux documents que vous avez uploadés. "
+                    "Cette question ne porte pas sur vos cours."
+                )
+                yield f"data: {json.dumps({'token': refusal})}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                reject_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
 
     # ── EXTERNAL DATA ENRICHMENT ──────────────────────────────────────────────
     external_data_text = ""
