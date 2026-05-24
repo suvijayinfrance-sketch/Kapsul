@@ -9,7 +9,7 @@ import re
 import time
 import uuid
 from io import BytesIO
-from typing import Any
+from typing import Any, Optional
 
 import fitz
 import httpx
@@ -31,6 +31,16 @@ except ImportError:
 from pydantic import BaseModel
 
 from data_sources import detect_data_needs, fetch_all, format_data_for_prompt
+from db import (
+    db_create_session,
+    db_delete_chunks_for_session,
+    db_get_session,
+    db_increment_blocked,
+    db_save_chunks,
+    db_save_document,
+    db_save_message,
+    db_update_session_master_md,
+)
 
 load_dotenv(".env.local")
 load_dotenv()
@@ -75,6 +85,28 @@ client = (
 
 # { session_id: { "master_md": str, "files": [str], "char_count": int } }
 sessions: dict[str, dict[str, Any]] = {}
+
+
+def get_session_with_fallback(session_id: str) -> Optional[dict]:
+    """
+    Get session from in-memory dict first (fast path).
+    If not found, try loading from Supabase (handles server restarts).
+    If found in Supabase, cache it back into in-memory dict.
+    """
+    # Fast path: in-memory
+    if session_id in sessions:
+        return sessions[session_id]
+
+    # Slow path: load from Supabase
+    print(f"[session] {session_id} not in memory — loading from Supabase...")
+    db_session = db_get_session(session_id)
+    if db_session:
+        sessions[session_id] = db_session  # cache it
+        print(
+            f"[session] Loaded from Supabase: {len(db_session.get('chunks', []))} chunks, "
+            f"{len(db_session.get('messages', []))} messages"
+        )
+    return db_session
 
 MASTER_MD_SYSTEM = """Tu es un assistant académique expert. Tu vas recevoir le contenu brut de plusieurs fichiers académiques.
 Ta mission : synthétiser tout ce contenu en un seul document Markdown structuré appelé "Référence Maître".
@@ -422,6 +454,8 @@ async def upload(files: list[UploadFile] = File(...)):
         raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
 
     session_id = str(uuid.uuid4())
+    # Create session in Supabase immediately (before processing)
+    db_create_session(session_id, [])
     chunks_all: list[dict] = []
     chunks: list[str] = []
     filenames: list[str] = []
@@ -440,6 +474,8 @@ async def upload(files: list[UploadFile] = File(...)):
         filenames.append(name)
         chunks.append(f"=== FILE: {name} ===\n{text}\n")
         chunks_all.extend(chunk_text(text, name, session_id))
+        # Record document in Supabase
+        db_save_document(session_id, name, len(data))
 
     combined = "\n\n".join(chunks)
     if not combined.strip():
@@ -466,9 +502,13 @@ async def upload(files: list[UploadFile] = File(...)):
         "files":         filenames,
         "char_count":    len(combined),
         "chunks":        chunks_all,
+        "messages":      [],
         "blocked_count": 0,
-        "messages":        [],
     }
+
+    # Persist to Supabase (non-blocking — don't fail upload if DB write fails)
+    db_update_session_master_md(session_id, master_md, len(combined), filenames)
+    db_save_chunks(chunks_all)
 
     return {
         "session_id":     session_id,
@@ -481,7 +521,7 @@ async def upload(files: list[UploadFile] = File(...)):
 
 @app.post("/api/session/{session_id}/add-files")
 async def add_files(session_id: str, files: list[UploadFile] = File(...)):
-    session = sessions.get(session_id)
+    session = get_session_with_fallback(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not files:
@@ -502,6 +542,7 @@ async def add_files(session_id: str, files: list[UploadFile] = File(...)):
         new_names.append(name)
         chunks.append(f"=== FILE: {name} ===\n{text}\n")
         new_file_chunks.extend(chunk_text(text, name, session_id))
+        db_save_document(session_id, name, len(data))
 
     combined = "\n\n".join(chunks)
     if not combined.strip():
@@ -525,6 +566,12 @@ async def add_files(session_id: str, files: list[UploadFile] = File(...)):
     session["char_count"] = session.get("char_count", 0) + len(combined)
     session["chunks"] = session.get("chunks", []) + new_file_chunks
 
+    # Persist updated session to Supabase
+    db_update_session_master_md(
+        session_id, master_md, session["char_count"], session["files"]
+    )
+    db_save_chunks(new_file_chunks)
+
     return {
         "session_id": session_id,
         "master_md": master_md,
@@ -536,7 +583,7 @@ async def add_files(session_id: str, files: list[UploadFile] = File(...)):
 
 @app.get("/api/session/{session_id}")
 def get_session(session_id: str):
-    session = sessions.get(session_id)
+    session = get_session_with_fallback(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
@@ -549,7 +596,7 @@ def get_session(session_id: str):
 
 @app.post("/api/chat/{session_id}")
 async def chat(session_id: str, body: ChatRequest):
-    session = sessions.get(session_id)
+    session = get_session_with_fallback(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not client:
@@ -565,6 +612,7 @@ async def chat(session_id: str, body: ChatRequest):
         on_topic = await is_question_on_topic(body.message, session, client)
         if not on_topic:
             session["blocked_count"] = session.get("blocked_count", 0) + 1
+            db_increment_blocked(session_id)
             print(
                 f"[topic-guard] Blocked question #{session['blocked_count']} "
                 f"in session {session_id}"
@@ -665,6 +713,11 @@ async def chat(session_id: str, body: ChatRequest):
                     full_answer += delta
                     tokens_buffer.append(delta)
 
+            # Persist messages to Supabase
+            db_save_message(session_id, "user", body.message)
+            db_save_message(session_id, "assistant", full_answer)
+
+            # Also update in-memory messages list
             if "messages" not in session:
                 session["messages"] = []
             session["messages"].append({"role": "user", "content": body.message})
@@ -714,7 +767,7 @@ async def generate_report(session_id: str, body: GenerateReportRequest):
             ),
         )
 
-    session = sessions.get(session_id)
+    session = get_session_with_fallback(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not client:

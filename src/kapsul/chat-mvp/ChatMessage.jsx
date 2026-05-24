@@ -1,7 +1,22 @@
 import React from 'react';
-import ReactMarkdown from 'react-markdown';
 
-function CitationBlock({ sources, k, isV2 }) {
+function TypingDots({ color }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 5, marginLeft: 4, verticalAlign: 'middle' }}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="kapsul-mvp-typing-dot"
+          style={{
+            width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function CitationBlock({ sources, isV2 }) {
   const [expanded, setExpanded] = React.useState(null);
 
   const toggle = (i) => setExpanded(expanded === i ? null : i);
@@ -49,7 +64,7 @@ function CitationBlock({ sources, k, isV2 }) {
           const isActive = expanded === i;
           return (
             <button
-              key={i}
+              key={`${s.doc}-${s.chunk}-${i}`}
               type="button"
               onClick={() => toggle(i)}
               style={{
@@ -82,13 +97,16 @@ function CitationBlock({ sources, k, isV2 }) {
       </div>
 
       {expanded !== null && sources[expanded] && (
-        <div style={{
-          marginTop: 8,
-          padding: '10px 12px',
-          borderRadius: 6,
-          background: isV2 ? 'rgba(0,0,0,0.3)' : '#F8FAFC',
-          border: `1px solid ${isV2 ? 'rgba(124,58,237,0.3)' : '#BFDBFE'}`,
-        }}>
+        <div
+          key={`cite-detail-${expanded}`}
+          style={{
+            marginTop: 8,
+            padding: '10px 12px',
+            borderRadius: 6,
+            background: isV2 ? 'rgba(0,0,0,0.3)' : '#F8FAFC',
+            border: `1px solid ${isV2 ? 'rgba(124,58,237,0.3)' : '#BFDBFE'}`,
+          }}
+        >
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -129,8 +147,32 @@ function CitationBlock({ sources, k, isV2 }) {
   );
 }
 
+/** Stable assistant body — no ReactMarkdown (incompatible with React 19 streaming updates). */
+function AssistantBody({ content, streaming, textColor }) {
+  const waiting = streaming && !content;
+  return (
+    <div
+      className="kapsul-mvp-md"
+      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: waiting ? '1.5em' : undefined }}
+    >
+      {waiting ? (
+        <TypingDots color={textColor} />
+      ) : (
+        <>
+          {content || (
+            <span style={{ fontStyle: 'italic', opacity: 0.7 }}>(No response text)</span>
+          )}
+          {streaming && content ? <span className="kapsul-mvp-cursor"> ▋</span> : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ChatMessage({ k, isV2, msg, streaming }) {
   const user = msg.role === 'user';
+  const showCitations = !streaming && msg.role === 'assistant' && msg.sources?.length > 0;
+
   return (
     <div style={{
       display: 'flex', justifyContent: user ? 'flex-end' : 'flex-start',
@@ -158,13 +200,10 @@ export function ChatMessage({ k, isV2, msg, streaming }) {
           {user ? (
             msg.content
           ) : (
-            <div className="kapsul-mvp-md">
-              <ReactMarkdown>{msg.content || ''}</ReactMarkdown>
-              {streaming && <span className="kapsul-mvp-cursor">▋</span>}
-            </div>
+            <AssistantBody content={msg.content} streaming={streaming} textColor={k.textMuted} />
           )}
-          {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-            <CitationBlock sources={msg.sources} k={k} isV2={isV2} />
+          {showCitations && (
+            <CitationBlock sources={msg.sources} isV2={isV2} />
           )}
         </div>
         {!user && !streaming && (
@@ -192,11 +231,7 @@ export function TypingIndicator({ k, isV2 }) {
         border: `1px solid ${k.border}`, borderRadius: isV2 ? 4 : 14,
         display: 'flex', gap: 6,
       }}>
-        {[0, 1, 2].map((i) => (
-          <span key={i} className="kapsul-mvp-typing-dot" style={{
-            width: 8, height: 8, borderRadius: '50%', background: k.textMuted, display: 'inline-block',
-          }} />
-        ))}
+        <TypingDots color={k.textMuted} />
       </div>
     </div>
   );

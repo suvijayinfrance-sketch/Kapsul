@@ -1,3 +1,4 @@
+import { Component } from 'react';
 import { KapsulProvider, useKapsul, SidebarV1, SidebarV2, HeaderV1, KAPSUL_THEME } from './kapsul/shell.jsx';
 import { AuthScreen } from './kapsul/screens-auth.jsx';
 import { HubScreen, ChatScreen } from './kapsul/screens-student.jsx';
@@ -31,6 +32,41 @@ export default function App() {
       {import.meta.env.DEV && <DevTweaks />}
     </KapsulProvider>
   );
+}
+
+class ScreenErrorBoundary extends Component {
+  state = { error: null };
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 32, color: '#F87171', fontFamily: 'monospace', fontSize: 14,
+        }}>
+          <div>
+            <p style={{ margin: '0 0 12px', fontWeight: 600 }}>Something went wrong in this screen.</p>
+            <p style={{ margin: 0, opacity: 0.8 }}>{this.state.error.message}</p>
+            <button
+              type="button"
+              onClick={() => { this.setState({ error: null }); location.reload(); }}
+              style={{
+                marginTop: 16, padding: '8px 16px', borderRadius: 6, border: 'none',
+                background: '#7C3AED', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function AppShell() {
@@ -80,10 +116,12 @@ function AppShell() {
         {!isV2 && screen !== 'chat' && (
           <HeaderV1 title={headerTitleMap[screen] || ''} />
         )}
-        <div key={`${version}-${role}-${screen}`} className="kapsul-screen"
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
-          <Screen />
-        </div>
+        <ScreenErrorBoundary key={`${version}-${role}-${screen}`}>
+          <div className="kapsul-screen"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+            <Screen />
+          </div>
+        </ScreenErrorBoundary>
       </main>
     </div>
   );

@@ -1,4 +1,5 @@
 const BASE = import.meta.env.VITE_API_BASE ?? '';
+const CHAT_TIMEOUT_MS = 180000;
 
 function formatApiError(body, fallback, status) {
   if (!body) return fallback;
@@ -75,12 +76,24 @@ export async function getSession(sessionId) {
 }
 
 export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = []) {
+  let streamFinished = false;
+  const finish = () => {
+    if (streamFinished) return;
+    streamFinished = true;
+    onDone?.();
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
+
   apiFetch(`/api/chat/${sessionId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, history, enabled_sources: enabledSources }),
+    signal: controller.signal,
   })
     .then(async (res) => {
+      clearTimeout(timeoutId);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(formatApiError(err, `Chat failed (${res.status})`, res.status));
@@ -88,11 +101,12 @@ export function streamChat(sessionId, message, history, { onToken, onDone, onErr
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let sawDone = false;
 
       const pump = () =>
         reader.read().then(({ done, value }) => {
           if (done) {
-            onDone?.();
+            finish();
             return;
           }
           buffer += decoder.decode(value, { stream: true });
@@ -102,24 +116,40 @@ export function streamChat(sessionId, message, history, { onToken, onDone, onErr
             if (!line.startsWith('data: ')) continue;
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
-              onDone?.();
-              return;
+              sawDone = true;
+              finish();
+              continue;
             }
             try {
               const parsed = JSON.parse(data);
               if (parsed.token) onToken(parsed.token);
               if (parsed.sources) onSources?.(parsed.sources);
-              if (parsed.error) onError?.(new Error(parsed.error));
+              if (parsed.error) {
+                streamFinished = true;
+                onError?.(new Error(
+                  typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error),
+                ));
+              }
             } catch {
               /* ignore partial JSON */
             }
+          }
+          if (sawDone) {
+            return reader.cancel().catch(() => {});
           }
           return pump();
         });
 
       return pump();
     })
-    .catch((e) => onError?.(e));
+    .catch((e) => {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        onError?.(new Error('Request timed out. The server may still be processing — try again.'));
+        return;
+      }
+      onError?.(e);
+    });
 }
 
 /**

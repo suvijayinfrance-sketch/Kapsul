@@ -19,6 +19,31 @@ const SUGGESTIONS_EN = [
   'Explain the first concept in the document',
 ];
 
+function newMsgId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Update the last assistant bubble without clobbering the user message above it. */
+function patchLastAssistant(messages, patch) {
+  const idx = messages.findLastIndex((m) => m.role === 'assistant');
+  if (idx < 0) {
+    return [...messages, { id: newMsgId(), role: 'assistant', content: '', ...patch }];
+  }
+  const copy = [...messages];
+  copy[idx] = { ...copy[idx], ...patch };
+  return copy;
+}
+
+/** Remove trailing empty assistant placeholder after an error. */
+function dropEmptyAssistantTail(messages) {
+  const idx = messages.findLastIndex((m) => m.role === 'assistant');
+  if (idx < 0) return messages;
+  if (messages[idx].content) return messages;
+  return messages.filter((_, i) => i !== idx);
+}
+
 export function ChatMvp() {
   const { version, lang, t } = useKapsul();
   const k = KAPSUL_THEME[version];
@@ -60,7 +85,7 @@ export function ChatMvp() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streaming, loading]);
+  }, [messages.length, streaming, loading]);
 
   const handleAddFiles = async (newFiles) => {
     if (!newFiles.length || !sessionId) return;
@@ -102,47 +127,52 @@ export function ChatMvp() {
 
   const sendMessage = useCallback((text) => {
     if (!sessionId || streaming) return;
-    const userMsg = { role: 'user', content: text };
+    const userMsg = { id: newMsgId(), role: 'user', content: text };
+    const assistantPlaceholder = { id: newMsgId(), role: 'assistant', content: '' };
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    setMessages((m) => [...m, userMsg]);
+    setMessages((m) => [...m, userMsg, assistantPlaceholder]);
     setStreaming(true);
     setLoading(true);
 
     let assistantText = '';
     let messageSources = [];
-    setMessages((m) => [...m, { role: 'assistant', content: '' }]);
+    let tokenFlushScheduled = false;
 
     streamChat(sessionId, text, history, {
       onToken: (token) => {
         assistantText += token;
-        setMessages((m) => {
-          const copy = [...m];
-          copy[copy.length - 1] = { role: 'assistant', content: assistantText };
-          return copy;
-        });
+        if (!tokenFlushScheduled) {
+          tokenFlushScheduled = true;
+          requestAnimationFrame(() => {
+            tokenFlushScheduled = false;
+            setMessages((m) => patchLastAssistant(m, { content: assistantText }));
+          });
+        }
         setLoading(false);
       },
       onSources: (srcs) => {
         messageSources = srcs;
+        setMessages((m) => patchLastAssistant(m, { sources: srcs }));
       },
       onDone: () => {
-        setMessages((m) => {
-          const copy = [...m];
-          copy[copy.length - 1] = {
-            role: 'assistant',
-            content: assistantText,
-            sources: messageSources,
-          };
-          return copy;
-        });
+        tokenFlushScheduled = false;
+        setMessages((m) => patchLastAssistant(m, {
+          content: assistantText,
+          sources: messageSources.length ? messageSources : undefined,
+        }));
         setStreaming(false);
         setLoading(false);
       },
       onError: (e) => {
         setStreaming(false);
         setLoading(false);
-        alert(e.message || 'Chat error');
-        setMessages((m) => m.slice(0, -1));
+        const msg = e.message || 'Chat error';
+        alert(msg.includes('429') || msg.includes('capacity')
+          ? (fr
+            ? 'Limite Mistral atteinte. Réessayez dans quelques minutes.'
+            : 'Mistral rate limit reached. Please try again in a few minutes.')
+          : msg);
+        setMessages((m) => dropEmptyAssistantTail(m));
       },
     }, enabledSources);
   }, [sessionId, messages, streaming, enabledSources]);
@@ -363,14 +393,13 @@ export function ChatMvp() {
             <div style={{ maxWidth: 760, margin: '0 auto' }}>
               {messages.map((msg, i) => (
                 <ChatMessage
-                  key={i}
+                  key={msg.id ?? `msg-${i}`}
                   k={k}
                   isV2={isV2}
                   msg={msg}
                   streaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
                 />
               ))}
-              {loading && !streaming && <TypingIndicator k={k} isV2={isV2} />}
               <div ref={bottomRef} />
             </div>
           )}
