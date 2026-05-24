@@ -8,7 +8,8 @@ server.py imports from here — no Supabase client code in server.py.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Optional
 
 from dotenv import load_dotenv
 from supabase import Client, create_client
@@ -60,7 +61,7 @@ def db_update_session_master_md(session_id: str, master_md: str,
             "master_md":  master_md,
             "char_count": char_count,
             "files":      files,
-            "updated_at": "now()",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", session_id).execute()
         return True
     except Exception as e:
