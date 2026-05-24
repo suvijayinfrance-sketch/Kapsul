@@ -227,3 +227,17 @@ export async function generateReport(sessionId, reportData) {
 }
 
 export const SESSION_STORAGE_KEY = 'kapsul_chat_session';
+
+/**
+ * getStorageStats — fetch storage statistics for a session from backend.
+ * Used to populate the StorageStatus panel with real DB counts.
+ */
+export async function getStorageStats(sessionId) {
+  try {
+    const res = await apiFetch(`/api/session/${sessionId}/stats`);
+    if (!res.ok) return null;
+    return parseJsonResponse(res, 'Storage stats');
+  } catch {
+    return null;
+  }
+}

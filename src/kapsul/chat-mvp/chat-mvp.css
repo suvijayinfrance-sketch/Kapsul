@@ -59,6 +59,33 @@
   opacity: 0;
 }
 
+@keyframes kapsul-slide {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(150%);  }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes kapsul-spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes kapsul-pulse-dot {
+  0%, 100% { opacity: 1;   transform: scale(1);    }
+  50%       { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes kapsul-step-done {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.2);             }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes kapsul-fadeup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
 .kapsul-mvp-cursor {
   animation: kapsul-mvp-blink 1s step-end infinite;
 }

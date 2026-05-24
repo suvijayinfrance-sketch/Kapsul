@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KAPSUL_THEME, useKapsul } from '../shell.jsx';
-import { uploadFiles, addFilesToSession, streamChat, getSession, generateReport, SESSION_STORAGE_KEY } from './api.js';
+import {
+  uploadFiles, addFilesToSession, streamChat, getSession, generateReport,
+  getStorageStats, SESSION_STORAGE_KEY,
+} from './api.js';
 import { FileDropzone } from './FileDropzone.jsx';
 import { ProcessingScreen } from './ProcessingScreen.jsx';
+import { StorageStatus } from './StorageStatus.jsx';
 import { ChatMessage, TypingIndicator } from './ChatMessage.jsx';
 import { ChatInputMvp } from './ChatInputMvp.jsx';
 import { MasterMDPreview } from './MasterMDPreview.jsx';
@@ -67,8 +71,75 @@ export function ChatMvp() {
   const [reportStudent, setReportStudent] = useState('');
   const [reportCourse, setReportCourse] = useState('');
   const [enabledSources, setEnabledSources] = useState([]);
+  const [docStates, setDocStates] = useState({});
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [processStep, setProcessStep] = useState('extract');
+  const [storedDocs, setStoredDocs] = useState([]);
+  const [processingFileList, setProcessingFileList] = useState([]);
   const addFilesInputRef = useRef(null);
   const bottomRef = useRef(null);
+  const stepTimersRef = useRef([]);
+
+  const STEP_TIMINGS = {
+    extract: 800,
+    synthesize: 500,
+    chunk: 400,
+    embed: 1000,
+    sync: 600,
+  };
+
+  const clearStepTimers = () => {
+    stepTimersRef.current.forEach(clearTimeout);
+    stepTimersRef.current = [];
+  };
+
+  const scheduleStep = (delay, fn) => {
+    const id = setTimeout(fn, delay);
+    stepTimersRef.current.push(id);
+    return id;
+  };
+
+  const startProcessAnimation = () => {
+    clearStepTimers();
+    setProcessStep('extract');
+    const steps = ['synthesize', 'chunk', 'embed', 'sync', 'done'];
+    const advance = (idx) => {
+      if (idx >= steps.length) return;
+      const prevStep = idx === 0 ? 'extract' : steps[idx - 1];
+      scheduleStep(STEP_TIMINGS[prevStep] || 800, () => {
+        setProcessStep(steps[idx]);
+        advance(idx + 1);
+      });
+    };
+    advance(0);
+  };
+
+  const mapStepToDocState = (step) => {
+    if (step === 'extract' || step === 'synthesize') return 'extracting';
+    if (step === 'chunk') return 'chunking';
+    if (step === 'embed') return 'embedding';
+    if (step === 'sync') return 'syncing';
+    if (step === 'done') return 'ready';
+    return 'uploading';
+  };
+
+  useEffect(() => () => clearStepTimers(), []);
+
+  useEffect(() => {
+    if (!processStep || phase !== 'processing') return;
+    const next = mapStepToDocState(processStep);
+    setDocStates((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const updated = {};
+      keys.forEach((name) => { updated[name] = next === 'ready' ? 'ready' : next; });
+      return updated;
+    });
+  }, [processStep, phase]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -77,11 +148,29 @@ export function ChatMvp() {
       .then((data) => {
         setSessionId(data.session_id);
         setMasterMD(data.master_md);
-        setFileCount(data.files?.length || 0);
+        const names = data.files || [];
+        setFileCount(names.length);
+        setStoredDocs(names.map((filename) => ({
+          filename: typeof filename === 'string' ? filename : filename.name || filename,
+          state: 'ready',
+          chunkCount: 0,
+        })));
+        setLastSaved(new Date().toISOString());
         setPhase('chat');
       })
       .catch(() => sessionStorage.removeItem(SESSION_STORAGE_KEY));
   }, []);
+
+  useEffect(() => {
+    if (!storageOpen || !sessionId) return;
+    getStorageStats(sessionId).then((stats) => {
+      if (!stats) return;
+      if (stats.total_chunks != null) setTotalChunks(stats.total_chunks);
+      if (stats.total_messages != null) setTotalMessages(stats.total_messages);
+      if (stats.last_saved) setLastSaved(stats.last_saved);
+      if (stats.documents?.length) setStoredDocs(stats.documents);
+    });
+  }, [storageOpen, sessionId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -91,20 +180,52 @@ export function ChatMvp() {
     if (!newFiles.length || !sessionId) return;
     setProcessingAppend(true);
     setPhase('processing');
+    setProcessingFileList(newFiles);
+    setIsSyncing(true);
+    const initialStates = {};
+    newFiles.forEach((f) => { initialStates[f.name] = 'uploading'; });
+    setDocStates(initialStates);
+    startProcessAnimation();
     try {
       const data = await addFilesToSession(sessionId, newFiles);
+      clearStepTimers();
+      setProcessStep('done');
       setMasterMD(data.master_md);
       setFileCount(data.file_count);
-      setPhase('chat');
+      const chunksAdded = data.chunks_indexed || 0;
+      setTotalChunks((prev) => prev + chunksAdded);
+      setLastSaved(new Date().toISOString());
+      setIsSyncing(false);
+      const perFileChunks = newFiles.length
+        ? Math.floor(chunksAdded / newFiles.length)
+        : 0;
+      setStoredDocs((prev) => [
+        ...prev,
+        ...newFiles.map((f) => ({
+          filename: f.name,
+          state: 'ready',
+          chunkCount: perFileChunks,
+        })),
+      ]);
+      const readyStates = {};
+      newFiles.forEach((f) => { readyStates[f.name] = 'ready'; });
+      setDocStates((prev) => ({ ...prev, ...readyStates }));
+      scheduleStep(600, () => setPhase('chat'));
     } catch (e) {
+      clearStepTimers();
       const msg = e.message || (fr ? 'Échec de l\'ajout' : 'Add files failed');
       if (msg.includes('Session expired') || msg.includes('Session not found')) {
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
       }
+      const errStates = {};
+      newFiles.forEach((f) => { errStates[f.name] = 'error'; });
+      setDocStates((prev) => ({ ...prev, ...errStates }));
       alert(msg);
       setPhase('chat');
+      setIsSyncing(false);
     } finally {
       setProcessingAppend(false);
+      setProcessingFileList([]);
     }
   };
 
@@ -112,16 +233,44 @@ export function ChatMvp() {
     if (!files.length) return;
     setProcessingAppend(false);
     setPhase('processing');
+    setProcessingFileList(files);
+    setProcessStep('extract');
+    setIsSyncing(true);
+    const initialStates = {};
+    files.forEach((f) => { initialStates[f.name] = 'uploading'; });
+    setDocStates(initialStates);
+    startProcessAnimation();
     try {
       const data = await uploadFiles(files);
+      clearStepTimers();
+      setProcessStep('done');
       setSessionId(data.session_id);
       setMasterMD(data.master_md);
       setFileCount(data.file_count);
+      setTotalChunks(data.chunks_indexed || 0);
+      setLastSaved(new Date().toISOString());
+      setIsSyncing(false);
+      const readyStates = {};
+      files.forEach((f) => { readyStates[f.name] = 'ready'; });
+      setDocStates(readyStates);
+      const perFileChunks = files.length
+        ? Math.floor((data.chunks_indexed || 0) / files.length)
+        : 0;
+      setStoredDocs(files.map((f) => ({
+        filename: f.name,
+        state: 'ready',
+        chunkCount: perFileChunks,
+      })));
       sessionStorage.setItem(SESSION_STORAGE_KEY, data.session_id);
-      setPhase('chat');
+      scheduleStep(600, () => setPhase('chat'));
     } catch (e) {
+      clearStepTimers();
       alert(e.message || 'Upload failed');
       setPhase('upload');
+      setDocStates({});
+      setIsSyncing(false);
+    } finally {
+      setProcessingFileList([]);
     }
   };
 
@@ -160,6 +309,8 @@ export function ChatMvp() {
           content: assistantText,
           sources: messageSources.length ? messageSources : undefined,
         }));
+        setTotalMessages((prev) => prev + 2);
+        setLastSaved(new Date().toISOString());
         setStreaming(false);
         setLoading(false);
       },
@@ -198,15 +349,34 @@ export function ChatMvp() {
 
   const resetSession = () => {
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    clearStepTimers();
     setPhase('upload');
     setFiles([]);
     setSessionId(null);
     setMasterMD('');
     setMessages([]);
+    setDocStates({});
+    setStorageOpen(false);
+    setTotalChunks(0);
+    setTotalMessages(0);
+    setLastSaved(null);
+    setIsSyncing(false);
+    setStoredDocs([]);
+    setProcessStep('extract');
   };
 
   if (phase === 'processing') {
-    return <ProcessingScreen k={k} lang={lang} appending={processingAppend} />;
+    return (
+      <ProcessingScreen
+        k={k}
+        lang={lang}
+        isV2={isV2}
+        appending={processingAppend}
+        currentStep={processStep}
+        docStates={docStates}
+        fileList={processingFileList}
+      />
+    );
   }
 
   if (phase === 'upload') {
@@ -271,6 +441,38 @@ export function ChatMvp() {
           }}>
             {fileCount} {fr ? 'fichiers analysés' : 'files analyzed'}
           </span>
+          {sessionId && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setStorageOpen((s) => !s)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  fontSize: 11, padding: '3px 10px', borderRadius: 999,
+                  border: `1px solid ${isSyncing ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.4)'}`,
+                  background: isSyncing ? 'rgba(6,182,212,0.1)' : 'rgba(16,185,129,0.1)',
+                  color: isSyncing ? '#06B6D4' : '#10B981',
+                  fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {isSyncing ? (
+                  <span style={{ animation: 'kapsul-spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                ) : '☁'}
+                {isSyncing ? (fr ? 'Sync...' : 'Syncing...') : (fr ? 'Sauvegardé' : 'Saved')}
+              </button>
+              <StorageStatus
+                sessionId={sessionId}
+                documents={storedDocs}
+                totalChunks={totalChunks}
+                totalMessages={totalMessages}
+                lastSaved={lastSaved}
+                isOpen={storageOpen}
+                onClose={() => setStorageOpen(false)}
+                k={k}
+                isV2={isV2}
+              />
+            </div>
+          )}
           {messages.length > 0 && (() => {
             const lastMsg = messages[messages.length - 1];
             if (streaming) {
