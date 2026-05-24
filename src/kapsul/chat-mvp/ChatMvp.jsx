@@ -56,7 +56,9 @@ export function ChatMvp() {
 
   const [phase, setPhase] = useState('upload');
   const [files, setFiles] = useState([]);
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionId, setSessionId] = useState(() => (
+    typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null
+  ));
   const [masterMD, setMasterMD] = useState('');
   const [fileCount, setFileCount] = useState(0);
   const [messages, setMessages] = useState([]);
@@ -162,8 +164,10 @@ export function ChatMvp() {
   }, []);
 
   useEffect(() => {
-    if (!storageOpen || !sessionId) return;
-    getStorageStats(sessionId).then((stats) => {
+    if (!storageOpen) return;
+    const sid = sessionId || sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sid) return;
+    getStorageStats(sid).then((stats) => {
       if (!stats) return;
       if (stats.total_chunks != null) setTotalChunks(stats.total_chunks);
       if (stats.total_messages != null) setTotalMessages(stats.total_messages);
@@ -417,6 +421,20 @@ export function ChatMvp() {
 
   const suggests = fr ? SUGGESTIONS_FR : SUGGESTIONS_EN;
 
+  const activeSessionId = sessionId
+    || (typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null);
+  const showStoragePanel = Boolean(activeSessionId || fileCount > 0);
+
+  const storageBtnStyle = {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    fontSize: 11, padding: '4px 11px', borderRadius: 999,
+    border: `1px solid ${isSyncing ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.4)'}`,
+    background: isSyncing ? 'rgba(6,182,212,0.1)' : 'rgba(16,185,129,0.1)',
+    color: isSyncing ? '#06B6D4' : '#10B981',
+    fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+    flexShrink: 0, whiteSpace: 'nowrap',
+  };
+
   return (
     <div data-screen-label="03 Chat" style={{
       flex: 1, display: 'flex', minHeight: 0, minWidth: 0,
@@ -425,54 +443,31 @@ export function ChatMvp() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{
           padding: '12px 20px', borderBottom: `1px solid ${k.border}`,
-          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+          flexWrap: 'wrap', rowGap: 8, overflow: 'visible',
         }}>
           <span style={{
-            fontSize: 16, fontWeight: 600,
+            fontSize: 16, fontWeight: 600, flexShrink: 0,
             background: isV2 ? 'linear-gradient(90deg, #7C3AED, #06B6D4)' : 'none',
             WebkitBackgroundClip: isV2 ? 'text' : 'unset',
             WebkitTextFillColor: isV2 ? 'transparent' : k.text,
             color: isV2 ? undefined : k.primary,
           }}>Kapsul AI</span>
-          <span style={{
-            fontSize: 11, padding: '4px 10px', borderRadius: 999,
-            background: isV2 ? 'rgba(124,58,237,0.12)' : k.primarySoft,
-            color: isV2 ? '#A78BFA' : k.primary, fontWeight: 500,
-          }}>
+          <button
+            type="button"
+            title={fr ? 'Voir le stockage cloud' : 'View cloud storage'}
+            onClick={() => showStoragePanel && setStorageOpen((s) => !s)}
+            style={{
+              fontSize: 11, padding: '4px 10px', borderRadius: 999, flexShrink: 0,
+              background: isV2 ? 'rgba(124,58,237,0.12)' : k.primarySoft,
+              color: isV2 ? '#A78BFA' : k.primary, fontWeight: 500,
+              border: showStoragePanel ? `1px solid ${isV2 ? 'rgba(124,58,237,0.35)' : k.border}` : 'none',
+              cursor: showStoragePanel ? 'pointer' : 'default',
+              fontFamily: 'inherit',
+            }}
+          >
             {fileCount} {fr ? 'fichiers analysés' : 'files analyzed'}
-          </span>
-          {sessionId && (
-            <div style={{ position: 'relative' }}>
-              <button
-                type="button"
-                onClick={() => setStorageOpen((s) => !s)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  fontSize: 11, padding: '3px 10px', borderRadius: 999,
-                  border: `1px solid ${isSyncing ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.4)'}`,
-                  background: isSyncing ? 'rgba(6,182,212,0.1)' : 'rgba(16,185,129,0.1)',
-                  color: isSyncing ? '#06B6D4' : '#10B981',
-                  fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                {isSyncing ? (
-                  <span style={{ animation: 'kapsul-spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-                ) : '☁'}
-                {isSyncing ? (fr ? 'Sync...' : 'Syncing...') : (fr ? 'Sauvegardé' : 'Saved')}
-              </button>
-              <StorageStatus
-                sessionId={sessionId}
-                documents={storedDocs}
-                totalChunks={totalChunks}
-                totalMessages={totalMessages}
-                lastSaved={lastSaved}
-                isOpen={storageOpen}
-                onClose={() => setStorageOpen(false)}
-                k={k}
-                isV2={isV2}
-              />
-            </div>
-          )}
+          </button>
           {messages.length > 0 && (() => {
             const lastMsg = messages[messages.length - 1];
             if (streaming) {
@@ -499,11 +494,37 @@ export function ChatMvp() {
             }
             return null;
           })()}
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, minWidth: 8 }} />
+          {showStoragePanel && (
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 210 }}>
+              <button
+                type="button"
+                onClick={() => setStorageOpen((s) => !s)}
+                style={storageBtnStyle}
+                title={fr ? 'Stockage cloud Supabase' : 'Supabase cloud storage'}
+              >
+                {isSyncing ? (
+                  <span style={{ animation: 'kapsul-spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                ) : '☁'}
+                {isSyncing ? (fr ? 'Sync...' : 'Syncing...') : (fr ? 'Sauvegardé' : 'Saved')}
+              </button>
+              <StorageStatus
+                sessionId={activeSessionId}
+                documents={storedDocs}
+                totalChunks={totalChunks}
+                totalMessages={totalMessages}
+                lastSaved={lastSaved}
+                isOpen={storageOpen}
+                onClose={() => setStorageOpen(false)}
+                k={k}
+                isV2={isV2}
+              />
+            </div>
+          )}
           <button type="button" onClick={() => (window.innerWidth < 768 ? setMobilePreview(true) : setShowPreview((s) => !s))}
             style={{
               background: 'none', border: 'none', color: k.textMuted, cursor: 'pointer',
-              fontSize: 13, textDecoration: 'underline', fontFamily: 'inherit',
+              fontSize: 13, textDecoration: 'underline', fontFamily: 'inherit', flexShrink: 0,
             }}>
             {fr ? 'Voir la référence →' : 'View reference →'}
           </button>
