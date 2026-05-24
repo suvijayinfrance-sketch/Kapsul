@@ -1,5 +1,16 @@
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+/** Normalize API base — bare hostnames break Safari fetch ("did not match the expected pattern"). */
+function normalizeApiBase(raw) {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/$/, '');
+  return `https://${trimmed.replace(/\/$/, '')}`;
+}
+
+const BASE = normalizeApiBase(import.meta.env.VITE_API_BASE);
 const CHAT_TIMEOUT_MS = 180000;
+
+const API_SETUP_HINT =
+  'Configure the API: set VITE_API_BASE to your Render URL (e.g. https://kapsul.onrender.com) in Vercel env vars, or use vercel.json /api proxy.';
 
 function formatApiError(body, fallback, status) {
   if (!body) return fallback;
@@ -17,10 +28,45 @@ function formatApiError(body, fallback, status) {
   return fallback;
 }
 
-async function apiFetch(url, options) {
+function buildApiUrl(path) {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return BASE ? `${BASE}${p}` : p;
+}
+
+async function parseJsonResponse(res, fallbackLabel) {
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (!ct.includes('application/json')) {
+    const snippet = (await res.text()).slice(0, 80).toLowerCase();
+    if (snippet.includes('<!doctype') || snippet.includes('<html')) {
+      throw new Error(
+        `${fallbackLabel}: received the web app instead of the API. ${API_SETUP_HINT}`,
+      );
+    }
+    throw new Error(`${fallbackLabel}: expected JSON from API. ${API_SETUP_HINT}`);
+  }
   try {
-    return await fetch(`${BASE}${url}`, options);
+    return await res.json();
   } catch {
+    throw new Error(
+      `${fallbackLabel}: invalid JSON from API. ${API_SETUP_HINT}`,
+    );
+  }
+}
+
+async function apiFetch(url, options) {
+  const fullUrl = buildApiUrl(url);
+  try {
+    return await fetch(fullUrl, options);
+  } catch (err) {
+    const msg = err?.message || '';
+    if (msg.includes('pattern') || msg.includes('valid URL')) {
+      throw new Error(
+        `Invalid API URL "${fullUrl}". ${API_SETUP_HINT}`,
+      );
+    }
+    if (BASE) {
+      throw new Error(`Cannot reach the API at ${BASE}. Check that Render is running.`);
+    }
     throw new Error(
       'Cannot reach the API server. Start it in a second terminal: npm run dev:api',
     );
@@ -31,10 +77,12 @@ export async function checkApiHealth() {
   const res = await apiFetch('/api/health');
   if (!res.ok) {
     throw new Error(
-      'API server is not running. In a second terminal, run: npm run dev:api',
+      BASE
+        ? `API health check failed (${res.status}). Check Render logs.`
+        : 'API server is not running. In a second terminal, run: npm run dev:api',
     );
   }
-  const data = await res.json();
+  const data = await parseJsonResponse(res, 'Health check');
   if (!data.mistral) throw new Error('MISTRAL_API_KEY missing on server. Check .env.local');
   return data;
 }
@@ -54,7 +102,7 @@ export async function uploadFiles(files) {
     }
     throw new Error(msg);
   }
-  return res.json();
+  return parseJsonResponse(res, 'Upload');
 }
 
 export async function addFilesToSession(sessionId, files) {
