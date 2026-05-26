@@ -8,7 +8,7 @@ export function useKapsul() {
 }
 
 export function KapsulProvider({ children, initial }) {
-  const [version, setVersion] = useState(initial?.version || 'v2');
+  const [version, setVersion] = useState(initial?.version || 'v1');
   const [role, setRole] = useState(initial?.role || 'student');
   const [lang, setLang] = useState(initial?.lang || 'fr');
   const [screen, setScreen] = useState(initial?.screen || 'auth');

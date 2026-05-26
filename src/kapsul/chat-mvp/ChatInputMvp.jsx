@@ -65,7 +65,7 @@ export function ChatInputMvp({
           padding: '6px 16px 4px',
           borderBottom: `1px solid ${k.border}`,
           flexWrap: 'wrap',
-          background: isV2 ? 'rgba(0,0,0,0.15)' : '#FAFAFA',
+          background: isV2 ? 'rgba(0,0,0,0.15)' : '#F8FAFC',
         }}>
           <span style={{
             fontSize: 10, fontWeight: 600, color: k.textMuted,
@@ -75,7 +75,7 @@ export function ChatInputMvp({
             {fr ? 'Sources :' : 'Sources:'}
           </span>
 
-          <span style={{ fontSize: 9, color: k.textMuted, fontWeight: 500 }}>
+          <span style={{ fontSize: 9, color: isV2 ? k.textMuted : '#94A3B8', fontWeight: 500 }}>
             {fr ? 'Données FR' : 'French Data'}
           </span>
           {DATA_SOURCES.filter((s) => s.group === 'french').map((source) => {
@@ -100,8 +100,8 @@ export function ChatInputMvp({
                   border: `1.5px solid ${active ? source.color : k.border}`,
                   background: active
                     ? (isV2 ? 'rgba(0,63,125,0.25)' : '#EFF6FF')
-                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
-                  color: active ? source.color : k.textMuted,
+                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#FFFFFF'),
+                  color: active ? source.color : (isV2 ? k.textMuted : '#64748B'),
                 }}
               >
                 <span style={{ fontSize: 12 }}>{source.emoji}</span>
@@ -118,7 +118,7 @@ export function ChatInputMvp({
 
           <span style={{ color: k.border, fontSize: 14 }}>|</span>
 
-          <span style={{ fontSize: 9, color: k.textMuted, fontWeight: 500 }}>
+          <span style={{ fontSize: 9, color: isV2 ? k.textMuted : '#94A3B8', fontWeight: 500 }}>
             {fr ? 'Données Éco' : 'Economic Data'}
           </span>
           {DATA_SOURCES.filter((s) => s.group === 'economic').map((source) => {
@@ -143,8 +143,8 @@ export function ChatInputMvp({
                   border: `1.5px solid ${active ? source.color : k.border}`,
                   background: active
                     ? (isV2 ? 'rgba(37,99,235,0.2)' : '#EFF6FF')
-                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
-                  color: active ? source.color : k.textMuted,
+                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#FFFFFF'),
+                  color: active ? source.color : (isV2 ? k.textMuted : '#64748B'),
                 }}
               >
                 <span style={{ fontSize: 12 }}>{source.emoji}</span>

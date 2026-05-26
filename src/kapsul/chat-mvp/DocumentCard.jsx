@@ -29,11 +29,11 @@ export function DocumentCard({
     return () => clearInterval(interval);
   }, [cfg.pulse]);
 
-  const rowBg = isV2 ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)';
-  const rowBorder = isV2 ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.1)';
-  const nameColor = isV2 ? '#D1D5DB' : '#334155';
+  const rowBg = isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC';
+  const rowBorder = isV2 ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
+  const nameColor = isV2 ? '#D1D5DB' : '#1E293B';
   const mutedColor = isV2 ? '#6B7280' : '#64748B';
-  const titleColor = isV2 ? '#E5E7EB' : '#0F172A';
+  const titleColor = isV2 ? '#E5E7EB' : '#1E293B';
 
   if (compact) {
     return (
@@ -45,8 +45,8 @@ export function DocumentCard({
       }}>
         <span style={{
           fontSize: 9, fontWeight: 700, padding: '2px 5px',
-          borderRadius: 3, background: 'rgba(124,58,237,0.2)',
-          color: '#A78BFA', flexShrink: 0,
+          borderRadius: 3, background: isV2 ? 'rgba(124,58,237,0.2)' : '#EFF6FF',
+          color: isV2 ? '#A78BFA' : '#2563EB', flexShrink: 0,
         }}>{ext}</span>
         <span style={{
           flex: 1, fontSize: 11.5, color: nameColor,
@@ -74,10 +74,11 @@ export function DocumentCard({
   return (
     <div style={{
       padding: '12px 14px', borderRadius: 8,
-      background: isV2 ? 'rgba(255,255,255,0.03)' : 'rgba(248,250,252,0.9)',
-      border: `1px solid ${state === 'ready' ? 'rgba(16,185,129,0.3)' :
-        state === 'error' ? 'rgba(239,68,68,0.3)' :
-        rowBorder}`,
+      background: isV2 ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
+      border: `1px solid ${
+        state === 'ready'  ? (isV2 ? 'rgba(16,185,129,0.3)' : '#BBF7D0') :
+        state === 'error'  ? (isV2 ? 'rgba(239,68,68,0.3)'  : '#FECACA') :
+                             rowBorder}`,
       transition: 'border-color 0.4s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -110,7 +111,7 @@ export function DocumentCard({
       {state !== 'ready' && state !== 'error' && (
         <div style={{
           marginTop: 8, height: 2, borderRadius: 1,
-          background: isV2 ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.08)',
+          background: isV2 ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
           overflow: 'hidden',
         }}>
           <div style={{

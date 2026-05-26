@@ -429,8 +429,10 @@ export function ChatMvp() {
     display: 'inline-flex', alignItems: 'center', gap: 5,
     fontSize: 11, padding: '4px 11px', borderRadius: 999,
     border: `1px solid ${isSyncing ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.4)'}`,
-    background: isSyncing ? 'rgba(6,182,212,0.1)' : 'rgba(16,185,129,0.1)',
-    color: isSyncing ? '#06B6D4' : '#10B981',
+    background: isSyncing
+      ? (isV2 ? 'rgba(6,182,212,0.1)' : '#ECFEFF')
+      : (isV2 ? 'rgba(16,185,129,0.1)' : '#F0FDF4'),
+    color: isSyncing ? '#06B6D4' : '#16A34A',
     fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
     flexShrink: 0, whiteSpace: 'nowrap',
   };

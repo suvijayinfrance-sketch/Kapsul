@@ -24,10 +24,11 @@ export function StorageStatus({
   const shortId = sessionId ? `${sessionId.slice(0, 8)}...` : '—';
   const savedTime = lastSaved ? new Date(lastSaved).toLocaleTimeString() : '—';
 
-  const panelBg = isV2 ? '#13131F' : k.surface;
-  const borderSubtle = isV2 ? 'rgba(255,255,255,0.1)' : k.border;
-  const textMain = isV2 ? '#E5E7EB' : k.text;
-  const textMuted = isV2 ? '#6B7280' : k.textMuted;
+  const panelBg = isV2 ? '#13131F' : '#FFFFFF';
+  const borderSubtle = isV2 ? 'rgba(255,255,255,0.1)' : '#E2E8F0';
+  const borderLight = isV2 ? 'rgba(255,255,255,0.07)' : '#F1F5F9';
+  const textMain = isV2 ? '#E5E7EB' : '#0F172A';
+  const textMuted = isV2 ? '#6B7280' : '#94A3B8';
 
   return (
     <div ref={panelRef} style={{
@@ -40,12 +41,12 @@ export function StorageStatus({
       background: panelBg,
       border: `1px solid ${borderSubtle}`,
       borderRadius: 10,
-      boxShadow: isV2 ? '0 20px 60px rgba(0,0,0,0.6)' : '0 12px 40px rgba(15,23,42,0.15)',
+      boxShadow: isV2 ? '0 20px 60px rgba(0,0,0,0.6)' : '0 8px 30px rgba(0,0,0,0.12)',
       overflow: 'hidden',
     }}>
       <div style={{
         padding: '12px 14px',
-        borderBottom: `1px solid ${isV2 ? 'rgba(255,255,255,0.07)' : k.border}`,
+        borderBottom: `1px solid ${borderLight}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div>
@@ -64,8 +65,8 @@ export function StorageStatus({
 
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
-        gap: 1, background: isV2 ? 'rgba(255,255,255,0.04)' : k.surfaceAlt,
-        borderBottom: `1px solid ${isV2 ? 'rgba(255,255,255,0.07)' : k.border}`,
+        gap: 1, background: isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC',
+        borderBottom: `1px solid ${borderLight}`,
       }}>
         {[
           { label: 'Documents', value: documents?.length || 0, color: '#A78BFA' },
@@ -110,7 +111,7 @@ export function StorageStatus({
 
       <div style={{
         padding: '8px 14px',
-        borderTop: `1px solid ${isV2 ? 'rgba(255,255,255,0.07)' : k.border}`,
+        borderTop: `1px solid ${borderLight}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span style={{ fontSize: 10, color: textMuted }}>

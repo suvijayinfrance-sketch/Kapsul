@@ -93,7 +93,7 @@ export function ProcessingScreen({
                 {isActive && (
                   <div style={{
                     marginTop: 6, marginLeft: 22, height: 2, borderRadius: 1,
-                    background: isV2 ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.08)',
+                    background: isV2 ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
                     overflow: 'hidden',
                   }}>
                     <div style={{

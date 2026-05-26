@@ -8,7 +8,7 @@ import {
 import { DevTweaks } from './DevTweaks.jsx';
 
 const TWEAK_DEFAULTS = {
-  version: 'v2',
+  version: 'v1',
   role: 'student',
   lang: 'fr',
   screen: 'auth',
