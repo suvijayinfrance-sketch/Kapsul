@@ -73,6 +73,9 @@ _HTTP_TIMEOUT = httpx.Timeout(
     write=_HTTP_TIMEOUT_SEC,
     pool=30.0,
 )
+_supabase_url = os.getenv("SUPABASE_URL", "")
+_supabase_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+
 if not api_key:
     print("WARNING: MISTRAL_API_KEY not set — /api/upload and /api/chat will fail")
 else:
@@ -80,6 +83,14 @@ else:
         f"Kapsul API: Mistral ready "
         f"(synthesis={MISTRAL_SYNTHESIS_MODEL}, timeout={MISTRAL_TIMEOUT_MS}ms)"
     )
+if not _supabase_url or not _supabase_key:
+    print(
+        "WARNING: SUPABASE_URL and/or SUPABASE_SERVICE_KEY not set — "
+        "library uploads and session persistence will fail. "
+        "Add both on Render (Environment) using the service_role key from Supabase."
+    )
+else:
+    print("Kapsul API: Supabase env vars present")
 client = (
     Mistral(
         api_key=api_key,
@@ -454,22 +465,27 @@ class GenerateReportRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
+    supabase_configured = bool(_supabase_url and _supabase_key)
     library_db = False
-    try:
-        from db_library import get_db as lib_get_db
-        ldb = lib_get_db()
-        if ldb:
-            ldb.table("library_documents").select("id").limit(1).execute()
-            library_db = True
-    except Exception:
-        library_db = False
+    library_db_error = None
+    if supabase_configured:
+        try:
+            from db_library import get_db as lib_get_db
+            ldb = lib_get_db()
+            if ldb:
+                ldb.table("library_documents").select("id").limit(1).execute()
+                library_db = True
+        except Exception as e:
+            library_db_error = str(e)[:200]
     return {
         "ok": True,
         "mistral": bool(api_key),
+        "supabase_configured": supabase_configured,
+        "library_db": library_db,
+        "library_db_error": library_db_error,
         "timeout_ms": MISTRAL_TIMEOUT_MS,
         "synthesis_model": MISTRAL_SYNTHESIS_MODEL,
         "report_engine": REPORT_ENGINE_AVAILABLE,
-        "library_db": library_db,
     }
 
 
