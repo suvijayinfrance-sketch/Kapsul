@@ -115,7 +115,7 @@ function AppShell() {
         flex: 1, display: 'flex', flexDirection: 'column',
         minWidth: 0, minHeight: 0, position: 'relative',
       }}>
-        {!isV2 && screen !== 'chat' && (
+        {!isV2 && screen !== 'chat' && screen !== 'pulse' && (
           <HeaderV1 title={headerTitleMap[screen] || ''} />
         )}
         <ScreenErrorBoundary key={`${version}-${role}-${screen}`}>

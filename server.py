@@ -8,6 +8,8 @@ import os
 import re
 import time
 import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any, Optional
 
@@ -40,6 +42,7 @@ from db import (
     db_save_document,
     db_save_message,
     db_update_session_master_md,
+    get_db,
 )
 from db_library import (
     lib_create_document, lib_update_document_ready, lib_update_document_error,
@@ -1057,6 +1060,212 @@ def admin_delete_document(doc_id: str):
     if not success:
         raise HTTPException(status_code=500, detail="Delete failed")
     return {"deleted": doc_id}
+
+
+# ── ADMIN ANALYTICS ───────────────────────────────────────────────────────────
+
+@app.get("/api/admin/analytics/kpis")
+def analytics_kpis():
+    """
+    Returns headline KPIs computed from Supabase data.
+    All computed server-side to avoid exposing raw data.
+    """
+    db = get_db()
+    if not db:
+        return {
+            "adoption_rate": 0,
+            "total_sessions": 0,
+            "total_messages": 0,
+            "tokens_saved": 0,
+            "blocked_requests": 0,
+            "indexed_documents": 0,
+        }
+
+    try:
+        lib_sessions = db.table("student_sessions").select("id", count="exact").execute()
+        personal_sessions = db.table("sessions").select("id", count="exact").execute()
+        total_sessions = (lib_sessions.count or 0) + (personal_sessions.count or 0)
+
+        lib_msgs = db.table("student_messages").select("id", count="exact").execute()
+        personal_msgs = db.table("messages").select("id", count="exact").execute()
+        total_messages = (lib_msgs.count or 0) + (personal_msgs.count or 0)
+
+        assistant_msgs = (
+            db.table("student_messages")
+            .select("id", count="exact")
+            .eq("role", "assistant")
+            .execute()
+        )
+        assistant_count = assistant_msgs.count or 0
+        tokens_saved = assistant_count * 97000
+
+        sessions_data = db.table("sessions").select("blocked_count").execute()
+        blocked_total = sum(
+            s.get("blocked_count", 0) or 0
+            for s in (sessions_data.data or [])
+        )
+
+        docs = (
+            db.table("library_documents")
+            .select("id", count="exact")
+            .eq("status", "indexed")
+            .execute()
+        )
+        indexed_docs = docs.count or 0
+
+        adoption_rate = 0
+        if total_sessions > 0:
+            active = min(round((total_messages / max(total_sessions, 1)) / 10 * 100), 100)
+            adoption_rate = active
+
+        return {
+            "adoption_rate": adoption_rate,
+            "total_sessions": total_sessions,
+            "total_messages": total_messages,
+            "tokens_saved": tokens_saved,
+            "blocked_requests": blocked_total,
+            "indexed_documents": indexed_docs,
+        }
+    except Exception as e:
+        print(f"[analytics] KPIs failed: {e}")
+        return {
+            "adoption_rate": 0,
+            "total_sessions": 0,
+            "total_messages": 0,
+            "tokens_saved": 0,
+            "blocked_requests": 0,
+            "indexed_documents": 0,
+        }
+
+
+@app.get("/api/admin/analytics/heatmap")
+def analytics_heatmap():
+    """
+    Returns a 7x13 matrix of message counts.
+    Rows = days of week (0=Monday ... 6=Sunday)
+    Cols = hours 8:00 to 20:00
+    """
+    db = get_db()
+    if not db:
+        return {"matrix": [], "max_value": 0}
+
+    try:
+        lib_msgs = (
+            db.table("student_messages")
+            .select("created_at")
+            .eq("role", "user")
+            .execute()
+        )
+        personal_msgs = (
+            db.table("messages")
+            .select("created_at")
+            .eq("role", "user")
+            .execute()
+        )
+
+        all_timestamps = []
+        for row in lib_msgs.data or []:
+            all_timestamps.append(row["created_at"])
+        for row in personal_msgs.data or []:
+            all_timestamps.append(row["created_at"])
+
+        matrix = [[0] * 13 for _ in range(7)]
+        hours_range = list(range(8, 21))
+
+        for ts_str in all_timestamps:
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                day = ts.weekday()
+                hour = ts.hour
+                if 8 <= hour <= 20:
+                    col = hour - 8
+                    matrix[day][col] += 1
+            except Exception:
+                continue
+
+        max_value = max(max(row) for row in matrix) if any(any(row) for row in matrix) else 1
+
+        return {
+            "matrix": matrix,
+            "max_value": max_value,
+            "days": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+            "hours": [f"{h}h" for h in hours_range],
+        }
+    except Exception as e:
+        print(f"[analytics] Heatmap failed: {e}")
+        return {"matrix": [], "max_value": 1, "days": [], "hours": []}
+
+
+@app.get("/api/admin/analytics/top-documents")
+def analytics_top_documents():
+    """
+    Returns library documents ranked by how many student sessions use them,
+    plus total message count per document.
+    """
+    db = get_db()
+    if not db:
+        return {"documents": []}
+
+    try:
+        sessions_res = (
+            db.table("student_sessions")
+            .select("id,document_ids")
+            .execute()
+        )
+
+        doc_session_count = defaultdict(int)
+        for session in sessions_res.data or []:
+            for doc_id in session.get("document_ids") or []:
+                doc_session_count[doc_id] += 1
+
+        if not doc_session_count:
+            docs = (
+                db.table("library_documents")
+                .select("id,display_name,subject,chunk_count,status")
+                .eq("status", "indexed")
+                .limit(5)
+                .execute()
+            )
+            return {
+                "documents": [
+                    {
+                        "id": d["id"],
+                        "name": d["display_name"],
+                        "subject": d.get("subject", ""),
+                        "chunk_count": d.get("chunk_count", 0),
+                        "session_count": 0,
+                        "rank": i + 1,
+                    }
+                    for i, d in enumerate(docs.data or [])
+                ]
+            }
+
+        top_doc_ids = sorted(doc_session_count, key=doc_session_count.get, reverse=True)[:5]
+        docs_res = (
+            db.table("library_documents")
+            .select("id,display_name,subject,chunk_count")
+            .in_("id", top_doc_ids)
+            .execute()
+        )
+
+        docs_map = {d["id"]: d for d in (docs_res.data or [])}
+
+        result = []
+        for rank, doc_id in enumerate(top_doc_ids, 1):
+            doc = docs_map.get(doc_id, {})
+            result.append({
+                "id": doc_id,
+                "name": doc.get("display_name", "Unknown"),
+                "subject": doc.get("subject", ""),
+                "chunk_count": doc.get("chunk_count", 0),
+                "session_count": doc_session_count[doc_id],
+                "rank": rank,
+            })
+
+        return {"documents": result}
+    except Exception as e:
+        print(f"[analytics] Top documents failed: {e}")
+        return {"documents": []}
 
 
 # ── STUDENT LIBRARY ENDPOINTS ─────────────────────────────────────────────────

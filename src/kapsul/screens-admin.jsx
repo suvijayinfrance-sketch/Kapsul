@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { KapsulIcons as Ic } from './icons.jsx';
 import { KAPSUL_THEME, useKapsul } from './shell.jsx';
 import { Badge, Toggle, LangToggle } from './screens-auth.jsx';
 import { ChatInput, EditorPanel } from './screens-student.jsx';
+import { LearningPulse } from './admin/LearningPulse.jsx';
 
 // ═══════════════════════════════════════════════════════════
 // STUDIO (Professor)
@@ -138,199 +139,13 @@ export function StudioScreen() {
 // LEARNING PULSE (Admin)
 // ═══════════════════════════════════════════════════════════
 export function PulseScreen() {
-  const { version, t, lang } = useKapsul();
+  const { version } = useKapsul();
   const k = KAPSUL_THEME[version];
   const isV2 = version === 'v2';
 
-  // Heatmap data — 7 days × 13 hours (08:00 – 20:00)
-  const hours = ['08','09','10','11','12','13','14','15','16','17','18','19','20'];
-  const heatmap = useMemo(() => {
-    const seed = (i, j) => Math.sin(i * 12.9898 + j * 78.233) * 43758.5453;
-    return t.days.map((_, i) => hours.map((_, j) => {
-      const base = Math.abs(seed(i, j) % 1);
-      // Boost mid-morning + afternoon, dim weekends
-      const peakBoost = (j > 1 && j < 5) || (j > 5 && j < 9) ? 0.45 : 0;
-      const weekend = i >= 5 ? -0.35 : 0;
-      const lunch = j === 4 ? -0.25 : 0;
-      return Math.max(0.04, Math.min(1, base * 0.5 + peakBoost + weekend + lunch + 0.15));
-    }));
-  }, []);
-
   return (
-    <div data-screen-label="05 Pulse" style={{
-      flex: 1, background: k.bg, color: k.text, fontFamily: k.fontUI,
-      overflowY: 'auto', minWidth: 0,
-    }}>
-      <div style={{ padding: isV2 ? '36px 40px 56px' : '32px 40px', maxWidth: 1320, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 28 }}>
-          <div style={{ flex: 1 }}>
-            {isV2 ? (
-              <>
-                <div style={{
-                  fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
-                  fontWeight: 500, letterSpacing: '0.18em', color: k.textMuted,
-                  textTransform: 'uppercase', marginBottom: 10,
-                }}>{t.pulseTitle}</div>
-                <h1 style={{
-                  margin: 0, fontFamily: '"Playfair Display", Georgia, serif',
-                  fontStyle: 'italic', fontSize: 36, fontWeight: 500,
-                  letterSpacing: -0.5, color: k.text, lineHeight: 1.15,
-                  marginBottom: 6,
-                }}>{lang === 'fr' ? 'Le pouls de votre établissement.' : 'The pulse of your institution.'}</h1>
-                <p style={{ margin: 0, fontSize: 14, color: k.textMuted }}>{t.pulseSub}</p>
-              </>
-            ) : (
-              <>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.4 }}>{t.pulseTitle}</h1>
-                <p style={{ margin: 0, marginTop: 4, fontSize: 14, color: k.textMuted }}>{t.pulseSub}</p>
-              </>
-            )}
-          </div>
-          <PrivacyBadge v={version} t={t}/>
-          {!isV2 && <LangToggle v={version} lang={lang} setLang={useKapsul().setLang}/>}
-        </div>
-
-        {/* Stats */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: isV2 ? 16 : 20, marginBottom: 24,
-        }}>
-          <StatCard v={version} delta="+12%" deltaTone="success"
-            value="1.2M" label={t.tokensSaved}/>
-          <StatCard v={version} delta="+5%" deltaTone="success"
-            value="85%" label={t.adoptionRate}/>
-          <StatCard v={version} delta={t.low} deltaTone="warning"
-            value="3" label={t.dropoutAlerts} alert/>
-        </div>
-
-        {/* Heatmap + Top tools */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 360px',
-          gap: isV2 ? 16 : 20,
-        }}>
-          {/* Heatmap */}
-          <div style={cardStyle(k, isV2)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isV2 ? '14px 18px' : '20px 24px 12px', borderBottom: isV2 ? `1px solid ${k.border}` : 'none' }}>
-              <div style={{
-                fontSize: isV2 ? 11 : 14,
-                fontWeight: isV2 ? 500 : 600,
-                letterSpacing: isV2 ? '0.14em' : 0,
-                textTransform: isV2 ? 'uppercase' : 'none',
-                color: isV2 ? k.textMuted : k.text,
-                fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-                flex: 1,
-              }}>{t.timeConn}</div>
-              <div style={{ fontSize: 12, color: k.textFaint }}>{t.timeConnSub}</div>
-            </div>
-            <div style={{ padding: isV2 ? '20px 18px' : '20px 24px' }}>
-              {/* hour labels */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: `40px repeat(${hours.length}, 1fr)`,
-                gap: 3, marginBottom: 6,
-                fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
-                color: k.textFaint, letterSpacing: '0.06em',
-              }}>
-                <div/>
-                {hours.map(h => <div key={h} style={{ textAlign: 'center' }}>{h}</div>)}
-              </div>
-              {t.days.map((day, i) => (
-                <div key={day} style={{
-                  display: 'grid',
-                  gridTemplateColumns: `40px repeat(${hours.length}, 1fr)`,
-                  gap: 3, marginBottom: 3,
-                }}>
-                  <div style={{
-                    fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-                    fontSize: 11, color: k.textMuted,
-                    display: 'flex', alignItems: 'center',
-                    letterSpacing: isV2 ? '0.08em' : 0,
-                    textTransform: isV2 ? 'uppercase' : 'none',
-                  }}>{day}</div>
-                  {heatmap[i].map((v, j) => (
-                    <div key={j} title={`${day} ${hours[j]}:00 — ${Math.round(v * 100)}%`} style={{
-                      height: 24, borderRadius: isV2 ? 2 : 3,
-                      background: isV2
-                        ? `rgba(124, 58, 237, ${v})`
-                        : `rgba(37, 99, 235, ${v})`,
-                      transition: 'transform 0.1s',
-                    }}/>
-                  ))}
-                </div>
-              ))}
-              {/* Legend */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginTop: 14,
-                fontSize: 11, color: k.textFaint,
-                fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-                letterSpacing: isV2 ? '0.06em' : 0,
-              }}>
-                <span>{lang === 'fr' ? 'Faible' : 'Low'}</span>
-                {[0.1, 0.25, 0.45, 0.7, 1].map((v, i) => (
-                  <div key={i} style={{
-                    width: 18, height: 12, borderRadius: 2,
-                    background: isV2 ? `rgba(124, 58, 237, ${v})` : `rgba(37, 99, 235, ${v})`,
-                  }}/>
-                ))}
-                <span>{lang === 'fr' ? 'Élevé' : 'High'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Top tools */}
-          <div style={cardStyle(k, isV2)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isV2 ? '14px 18px' : '20px 24px 12px', borderBottom: isV2 ? `1px solid ${k.border}` : 'none' }}>
-              <div style={{
-                fontSize: isV2 ? 11 : 14, fontWeight: isV2 ? 500 : 600,
-                letterSpacing: isV2 ? '0.14em' : 0,
-                textTransform: isV2 ? 'uppercase' : 'none',
-                color: isV2 ? k.textMuted : k.text,
-                fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-                flex: 1,
-              }}>{t.topTools}</div>
-              <select style={{
-                fontSize: 11, padding: '4px 8px',
-                background: 'transparent', color: k.textMuted,
-                border: `1px solid ${k.border}`, borderRadius: isV2 ? 3 : 4,
-                fontFamily: 'inherit',
-              }}>
-                <option>{t.filterAll}</option>
-              </select>
-            </div>
-            <div style={{ padding: isV2 ? '20px 18px' : '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {[
-                { name: 'Kapsul', value: '94%', width: '94%' },
-                { name: 'ChatGPT', value: '21%', width: '21%' },
-                { name: 'Notion', value: '8%', width: '8%' },
-              ].map(b => (
-                <div key={b.name}>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    fontSize: 13, marginBottom: 6,
-                  }}>
-                    <span style={{ color: k.text, fontWeight: 500 }}>{b.name}</span>
-                    <span style={{
-                      color: k.textMuted,
-                      fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
-                    }}>{b.value}</span>
-                  </div>
-                  <div style={{
-                    height: isV2 ? 6 : 8, borderRadius: 4,
-                    background: isV2 ? k.surfaceAlt : '#F1F5F9',
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      width: b.width, height: '100%',
-                      background: k.primary, borderRadius: 4,
-                    }}/>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div data-screen-label="05 Pulse" style={{ flex: 1, display: 'flex', minWidth: 0, minHeight: 0 }}>
+      <LearningPulse k={k} isV2={isV2} />
     </div>
   );
 };
@@ -364,46 +179,6 @@ const PrivacyBadge = ({ v, t }) => {
   );
 };
 
-const StatCard = ({ v, delta, deltaTone, value, label, alert }) => {
-  const k = KAPSUL_THEME[v];
-  const isV2 = v === 'v2';
-  const deltaColors = isV2 ? {
-    success: { bg: 'rgba(16,185,129,0.1)', color: '#34D399', border: 'rgba(52,211,153,0.4)' },
-    warning: { bg: 'rgba(245,158,11,0.1)', color: '#FBBF24', border: 'rgba(251,191,36,0.4)' },
-  } : {
-    success: { bg: '#DCFCE7', color: '#15803D', border: 'transparent' },
-    warning: { bg: '#FFEDD5', color: '#C2410C', border: 'transparent' },
-  };
-  const c = deltaColors[deltaTone] || deltaColors.success;
-  return (
-    <div style={{
-      ...cardStyle(k, isV2),
-      padding: isV2 ? 24 : 24,
-      display: 'flex', flexDirection: 'column', gap: 10,
-      position: 'relative',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {alert && <Ic.Bell size={15} sw={1.7} style={{ color: isV2 ? '#FBBF24' : '#EA580C' }}/>}
-        <div style={{ flex: 1, fontSize: 13, color: k.textMuted, fontWeight: 500 }}>{label}</div>
-        <span style={{
-          padding: isV2 ? '3px 8px' : '4px 10px',
-          background: c.bg, color: c.color,
-          border: `1px solid ${c.border}`,
-          borderRadius: isV2 ? 3 : 999,
-          fontSize: isV2 ? 10 : 11, fontWeight: 600, letterSpacing: isV2 ? '0.1em' : '0.04em',
-          fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-          textTransform: 'uppercase',
-        }}>{delta}</span>
-      </div>
-      <div style={{
-        fontSize: isV2 ? 48 : 36,
-        fontWeight: isV2 ? 500 : 700,
-        letterSpacing: -1, color: k.text, lineHeight: 1,
-        fontFamily: isV2 ? '"JetBrains Mono", monospace' : 'inherit',
-      }}>{value}</div>
-    </div>
-  );
-};
 // ═══════════════════════════════════════════════════════════
 // KAPSUL STORE
 // ═══════════════════════════════════════════════════════════
