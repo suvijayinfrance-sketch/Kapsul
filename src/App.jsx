@@ -5,6 +5,8 @@ import { HubScreen, ChatScreen } from './kapsul/screens-student.jsx';
 import {
   StudioScreen, PulseScreen, StoreScreen, RagScreen, PlaceholderScreen,
 } from './kapsul/screens-admin.jsx';
+import { AdminLibrary } from './kapsul/chat-mvp/AdminLibrary.jsx';
+import { StudentLibrary } from './kapsul/chat-mvp/StudentLibrary.jsx';
 import { DevTweaks } from './DevTweaks.jsx';
 
 const TWEAK_DEFAULTS = {
@@ -85,11 +87,11 @@ function AppShell() {
   const Sidebar = isV2 ? SidebarV2 : SidebarV1;
   const screens = {
     hub: HubScreen,
-    chat: ChatScreen,
+    chat: role === 'student' ? StudentLibrary : ChatScreen,
     studio: StudioScreen,
     pulse: PulseScreen,
     store: StoreScreen,
-    rag: RagScreen,
+    rag: role === 'admin' ? AdminLibrary : RagScreen,
   };
   const Screen = screens[screen] || (() => <PlaceholderScreen label={screen} />);
 

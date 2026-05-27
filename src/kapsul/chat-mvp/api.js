@@ -227,6 +227,139 @@ export async function generateReport(sessionId, reportData) {
 }
 
 export const SESSION_STORAGE_KEY = 'kapsul_chat_session';
+export const LIBRARY_SESSION_KEY = 'kapsul_library_session';
+
+
+// ── Admin Library API ─────────────────────────────────────────────────────
+
+export async function adminUploadToLibrary(files, subject = '', description = '') {
+  const form = new FormData();
+  files.forEach(f => form.append('files', f));
+  if (subject)     form.append('subject', subject);
+  if (description) form.append('description', description);
+
+  const res = await apiFetch('/api/admin/library/upload', {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(formatApiError(err, `Upload failed (${res.status})`, res.status));
+  }
+  return res.json();
+}
+
+export async function adminGetLibrary() {
+  const res = await apiFetch('/api/admin/library');
+  if (!res.ok) throw new Error('Could not load library');
+  return res.json();
+}
+
+export async function adminDeleteDocument(docId) {
+  const res = await apiFetch(`/api/admin/library/${docId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Delete failed');
+  return res.json();
+}
+
+// ── Student Library API ───────────────────────────────────────────────────
+
+export async function getStudentLibrary() {
+  const res = await apiFetch('/api/library');
+  if (!res.ok) throw new Error('Could not load library');
+  return res.json();
+}
+
+export async function startLibrarySession(documentIds) {
+  const res = await apiFetch('/api/library/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(formatApiError(err, `Session start failed (${res.status})`, res.status));
+  }
+  return res.json();
+}
+
+export function streamLibraryChat(sessionId, message, history,
+                                   { onToken, onDone, onError, onSources },
+                                   enabledSources = []) {
+  let streamFinished = false;
+  const finish = () => {
+    if (streamFinished) return;
+    streamFinished = true;
+    onDone?.();
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+  apiFetch(`/api/library/chat/${sessionId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, history, enabled_sources: enabledSources }),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(formatApiError(err, `Chat failed (${res.status})`, res.status));
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let sawDone = false;
+
+      const pump = () =>
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            finish();
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              sawDone = true;
+              finish();
+              continue;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.token) onToken(parsed.token);
+              if (parsed.sources) onSources?.(parsed.sources);
+              if (parsed.error) {
+                streamFinished = true;
+                onError?.(new Error(
+                  typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error),
+                ));
+              }
+            } catch {
+              /* ignore partial JSON */
+            }
+          }
+          if (sawDone) {
+            return reader.cancel().catch(() => {});
+          }
+          return pump();
+        });
+
+      return pump();
+    })
+    .catch((e) => {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        onError?.(new Error('Request timed out. The server may still be processing — try again.'));
+        return;
+      }
+      onError?.(e);
+    });
+}
 
 /**
  * getStorageStats — fetch storage statistics for a session from backend.

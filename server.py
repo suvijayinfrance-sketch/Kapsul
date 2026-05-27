@@ -15,7 +15,7 @@ import fitz
 import httpx
 from docx import Document
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from mistralai.client import Mistral
@@ -40,6 +40,13 @@ from db import (
     db_save_document,
     db_save_message,
     db_update_session_master_md,
+)
+from db_library import (
+    lib_create_document, lib_update_document_ready, lib_update_document_error,
+    lib_get_all_documents, lib_get_indexed_documents, lib_delete_document,
+    lib_save_chunks, lib_get_chunks_for_documents, lib_get_master_mds_for_documents,
+    lib_create_student_session, lib_get_student_session,
+    lib_save_student_message, lib_get_student_messages,
 )
 
 load_dotenv(".env.local")
@@ -403,6 +410,16 @@ Respond with ONLY one word: YES or NO"""
 
 
 class ChatRequest(BaseModel):
+    message: str
+    history: list[dict[str, str]] = []
+    enabled_sources: list[str] = []
+
+
+class StartStudentSessionRequest(BaseModel):
+    document_ids: list[str]
+
+
+class LibraryChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
     enabled_sources: list[str] = []
@@ -913,4 +930,242 @@ RÈGLES IMPORTANTES :
         content    = pdf_bytes,
         media_type = "application/pdf",
         headers    = {"Content-Disposition": f'attachment; filename="Kapsul_{safe_title}.pdf"'},
+    )
+
+
+# ── ADMIN LIBRARY ENDPOINTS ───────────────────────────────────────────────────
+
+@app.post("/api/admin/library/upload")
+async def admin_upload(
+    files: list[UploadFile] = File(...),
+    subject: str = Form(""),
+    description: str = Form(""),
+):
+    """
+    Admin uploads documents to the shared library.
+    Each file is processed independently:
+    extract -> chunk -> embed -> master_md -> save to Supabase
+    """
+    if not client:
+        raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
+
+    results = []
+
+    for f in files:
+        data     = await f.read()
+        filename = f.filename or "unknown"
+        doc_id   = None
+
+        try:
+            doc_id = lib_create_document(
+                filename=filename,
+                display_name=filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title(),
+                subject=subject,
+                description=description,
+                file_size=len(data),
+            )
+            if not doc_id:
+                results.append({"filename": filename, "status": "error", "error": "DB create failed"})
+                continue
+
+            text = extract_text(filename, data)
+            if not text.strip():
+                lib_update_document_error(doc_id, "No text could be extracted")
+                results.append({"filename": filename, "status": "error", "error": "No text extracted"})
+                continue
+
+            chunks = chunk_text(text, filename, doc_id)
+            chunks = embed_chunks(chunks)
+            embedded_count = sum(1 for c in chunks if c.get("embedding"))
+
+            master_md = mistral_complete(
+                [{"role": "system", "content": MASTER_MD_SYSTEM},
+                 {"role": "user",   "content": text[:120000]}],
+                "mistral-large-latest",
+            )
+
+            lib_save_chunks(doc_id, chunks)
+            lib_update_document_ready(
+                doc_id=doc_id,
+                master_md=master_md,
+                chunk_count=embedded_count,
+                word_count=len(text.split()),
+            )
+
+            results.append({
+                "filename":    filename,
+                "doc_id":      doc_id,
+                "status":      "indexed",
+                "chunk_count": embedded_count,
+                "word_count":  len(text.split()),
+            })
+            print(f"[admin] Indexed '{filename}': {embedded_count} chunks")
+
+        except Exception as e:
+            if doc_id:
+                lib_update_document_error(doc_id, str(e)[:200])
+            results.append({"filename": filename, "status": "error", "error": str(e)})
+            print(f"[admin] Failed '{filename}': {e}")
+
+    return {"results": results, "total": len(files),
+            "indexed": sum(1 for r in results if r["status"] == "indexed")}
+
+
+@app.get("/api/admin/library")
+def admin_get_library():
+    """Get all library documents (admin view — includes processing/error states)."""
+    docs = lib_get_all_documents()
+    return {"documents": docs, "count": len(docs)}
+
+
+@app.delete("/api/admin/library/{doc_id}")
+def admin_delete_document(doc_id: str):
+    """Delete a document from the library (cascades to chunks)."""
+    success = lib_delete_document(doc_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Delete failed")
+    return {"deleted": doc_id}
+
+
+# ── STUDENT LIBRARY ENDPOINTS ─────────────────────────────────────────────────
+
+@app.get("/api/library")
+def get_student_library():
+    """Get all indexed documents for the student library view."""
+    docs = lib_get_indexed_documents()
+    return {"documents": docs, "count": len(docs)}
+
+
+@app.post("/api/library/session")
+def create_library_session(body: StartStudentSessionRequest):
+    """
+    Student selects documents and starts a chat session.
+    Creates a student_session linked to those document IDs.
+    Returns session_id + combined master_md for the reference panel.
+    """
+    if not body.document_ids:
+        raise HTTPException(status_code=400, detail="No documents selected")
+
+    session_id = str(uuid.uuid4())
+    lib_create_student_session(session_id, body.document_ids)
+
+    combined_master_md = lib_get_master_mds_for_documents(body.document_ids)
+    chunks = lib_get_chunks_for_documents(body.document_ids)
+
+    sessions[session_id] = {
+        "master_md":    combined_master_md,
+        "files":        body.document_ids,
+        "chunks":       chunks,
+        "messages":     [],
+        "is_library":   True,
+    }
+
+    return {
+        "session_id": session_id,
+        "master_md":  combined_master_md,
+        "doc_count":  len(body.document_ids),
+        "chunk_count": len(chunks),
+    }
+
+
+@app.post("/api/library/chat/{session_id}")
+async def library_chat(session_id: str, body: LibraryChatRequest):
+    """
+    Student chat against library documents.
+    Same RAG pipeline as personal chat but uses library chunks.
+    """
+    session = sessions.get(session_id)
+    if not session:
+        db_session = lib_get_student_session(session_id)
+        if not db_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        chunks = lib_get_chunks_for_documents(db_session["document_ids"])
+        combined_master_md = lib_get_master_mds_for_documents(db_session["document_ids"])
+        session = {
+            "master_md":  combined_master_md,
+            "files":      db_session["document_ids"],
+            "chunks":     chunks,
+            "messages":   lib_get_student_messages(session_id),
+            "is_library": True,
+        }
+        sessions[session_id] = session
+
+    if not client:
+        raise HTTPException(status_code=500, detail="MISTRAL_API_KEY not configured")
+
+    chunks  = session.get("chunks", [])
+    use_rag = any(c.get("embedding") for c in chunks)
+    sources = []
+
+    if use_rag:
+        try:
+            q_resp = client.embeddings.create(
+                model="mistral-embed",
+                inputs=[body.message],
+            )
+            question_embedding = q_resp.data[0].embedding
+            relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
+            evidence       = build_evidence_pack(relevant)
+            system_content = RAG_SYSTEM_PROMPT.format(evidence_pack=evidence)
+            sources = [
+                {
+                    "doc":   c["doc_name"],
+                    "chunk": c["chunk_index"],
+                    "text":  c["content"][:300],
+                    "words": len(c["content"].split()),
+                    "score": round(c.pop("_score", 0.0), 3),
+                }
+                for c in relevant
+            ]
+        except Exception as e:
+            print(f"[lib_chat] RAG failed ({e}) — using master_md fallback")
+            use_rag = False
+
+    if not use_rag:
+        system_content = (
+            "Tu es un assistant académique. Réponds UNIQUEMENT à partir des documents suivants.\n\n"
+            f"DOCUMENTS:\n{session['master_md'][:8000]}"
+        )
+
+    messages_to_send = [{"role": "system", "content": system_content}]
+    for h in body.history:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages_to_send.append({"role": h["role"], "content": h["content"]})
+    messages_to_send.append({"role": "user", "content": body.message})
+
+    def generate():
+        full_answer = ""
+        try:
+            if sources:
+                yield f"data: {json.dumps({'sources': sources})}\n\n"
+
+            stream = client.chat.stream(model="mistral-small-latest", messages=messages_to_send)
+            for event in stream:
+                delta = None
+                try:
+                    choice = event.data.choices[0]
+                    if choice.delta and choice.delta.content:
+                        delta = choice.delta.content
+                except (AttributeError, IndexError, TypeError):
+                    pass
+                if delta:
+                    full_answer += delta
+                    yield f"data: {json.dumps({'token': delta})}\n\n"
+
+            lib_save_student_message(session_id, "user", body.message)
+            lib_save_student_message(session_id, "assistant", full_answer)
+            if "messages" not in session:
+                session["messages"] = []
+            session["messages"].append({"role": "user",      "content": body.message})
+            session["messages"].append({"role": "assistant",  "content": full_answer})
+
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
