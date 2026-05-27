@@ -454,12 +454,22 @@ class GenerateReportRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
+    library_db = False
+    try:
+        from db_library import get_db as lib_get_db
+        ldb = lib_get_db()
+        if ldb:
+            ldb.table("library_documents").select("id").limit(1).execute()
+            library_db = True
+    except Exception:
+        library_db = False
     return {
         "ok": True,
         "mistral": bool(api_key),
         "timeout_ms": MISTRAL_TIMEOUT_MS,
         "synthesis_model": MISTRAL_SYNTHESIS_MODEL,
         "report_engine": REPORT_ENGINE_AVAILABLE,
+        "library_db": library_db,
     }
 
 
@@ -957,7 +967,7 @@ async def admin_upload(
         doc_id   = None
 
         try:
-            doc_id = lib_create_document(
+            doc_id, db_err = lib_create_document(
                 filename=filename,
                 display_name=filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title(),
                 subject=subject,
@@ -965,7 +975,13 @@ async def admin_upload(
                 file_size=len(data),
             )
             if not doc_id:
-                results.append({"filename": filename, "status": "error", "error": "DB create failed"})
+                err = db_err or "DB create failed"
+                if "permission denied" in err.lower():
+                    err = (
+                        "Database permission denied. In Supabase SQL Editor, run the GRANT "
+                        "statements in supabase/library_schema.sql (bottom of file)."
+                    )
+                results.append({"filename": filename, "status": "error", "error": err})
                 continue
 
             text = extract_text(filename, data)

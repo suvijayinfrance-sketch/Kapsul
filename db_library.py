@@ -7,6 +7,7 @@ Completely separate from the existing db.py (personal sessions).
 
 from __future__ import annotations
 import os
+from datetime import datetime, timezone
 from typing import Optional
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -30,14 +31,14 @@ def get_db() -> Optional[Client]:
 
 def lib_create_document(filename: str, display_name: str,
                         subject: str = "", description: str = "",
-                        file_size: int = 0) -> Optional[str]:
+                        file_size: int = 0) -> tuple[Optional[str], Optional[str]]:
     """
     Create a new library document record with status 'processing'.
-    Returns the document UUID, or None on failure.
+    Returns (document_uuid, error_message). On success error_message is None.
     """
     db = get_db()
     if not db:
-        return None
+        return None, "Supabase not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)"
     try:
         res = db.table("library_documents").insert({
             "filename":     filename,
@@ -47,10 +48,12 @@ def lib_create_document(filename: str, display_name: str,
             "file_size":    file_size,
             "status":       "processing",
         }).execute()
-        return res.data[0]["id"] if res.data else None
+        if res.data:
+            return res.data[0]["id"], None
+        return None, "Insert returned no row"
     except Exception as e:
         print(f"[lib_db] create_document failed: {e}")
-        return None
+        return None, str(e)
 
 
 def lib_update_document_ready(doc_id: str, master_md: str,
@@ -65,7 +68,7 @@ def lib_update_document_ready(doc_id: str, master_md: str,
             "master_md":   master_md,
             "chunk_count": chunk_count,
             "word_count":  word_count,
-            "updated_at":  "now()",
+            "updated_at":  datetime.now(timezone.utc).isoformat(),
         }).eq("id", doc_id).execute()
         return True
     except Exception as e:
@@ -82,7 +85,7 @@ def lib_update_document_error(doc_id: str, error_msg: str = "") -> bool:
         db.table("library_documents").update({
             "status":     "error",
             "description": error_msg[:200],
-            "updated_at": "now()",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", doc_id).execute()
         return True
     except Exception as e:
