@@ -169,8 +169,9 @@ function AssistantBody({ content, streaming, textColor }) {
   );
 }
 
-export function ChatMessage({ k, isV2, msg, streaming }) {
+export function ChatMessage({ k, isV2, msg, streaming, lang = 'fr' }) {
   const user = msg.role === 'user';
+  const fr = lang === 'fr';
   const showCitations = !streaming && msg.role === 'assistant' && msg.sources?.length > 0;
 
   return (
@@ -204,6 +205,20 @@ export function ChatMessage({ k, isV2, msg, streaming }) {
           )}
           {showCitations && (
             <CitationBlock sources={msg.sources} isV2={isV2} />
+          )}
+          {msg.role === 'assistant' && msg.content.includes('🃏 RECTO') && (
+            <div style={{
+              marginTop: 10,
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: isV2 ? 'rgba(220,38,38,0.1)' : '#FEF2F2',
+              border: `1px solid ${isV2 ? 'rgba(220,38,38,0.3)' : '#FECACA'}`,
+              fontSize: 12,
+              color: isV2 ? '#FCA5A5' : '#DC2626',
+              fontWeight: 600,
+            }}>
+              🃏 {fr ? 'Mode Recall actif — répondez pour voir le verso' : 'Recall mode active — answer to reveal the back'}
+            </div>
           )}
         </div>
         {!user && !streaming && (

@@ -123,7 +123,7 @@ export async function getSession(sessionId) {
   return res.json();
 }
 
-export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = []) {
+export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = [], mode = 'tuteur') {
   let streamFinished = false;
   const finish = () => {
     if (streamFinished) return;
@@ -137,7 +137,7 @@ export function streamChat(sessionId, message, history, { onToken, onDone, onErr
   apiFetch(`/api/chat/${sessionId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, enabled_sources: enabledSources }),
+    body: JSON.stringify({ message, history, enabled_sources: enabledSources, mode }),
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -284,7 +284,7 @@ export async function startLibrarySession(documentIds) {
 
 export function streamLibraryChat(sessionId, message, history,
                                    { onToken, onDone, onError, onSources },
-                                   enabledSources = []) {
+                                   enabledSources = [], mode = 'tuteur') {
   let streamFinished = false;
   const finish = () => {
     if (streamFinished) return;
@@ -298,7 +298,7 @@ export function streamLibraryChat(sessionId, message, history,
   apiFetch(`/api/library/chat/${sessionId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, enabled_sources: enabledSources }),
+    body: JSON.stringify({ message, history, enabled_sources: enabledSources, mode }),
     signal: controller.signal,
   })
     .then(async (res) => {

@@ -180,6 +180,93 @@ Si l'étudiant pose une question hors-sujet, réponds UNIQUEMENT :
 
 {evidence_pack}"""
 
+# ── PEDAGOGICAL MODE SYSTEM PROMPTS ──────────────────────────────────────────
+# Each prompt enforces the Standard Kapsul response schema
+# while adapting the AI's pedagogical behaviour.
+
+KAPSUL_SCHEMA_REMINDER = """
+FORMAT DE RÉPONSE OBLIGATOIRE (Standard Kapsul) :
+Tu DOIS structurer ta réponse ainsi — adapte la longueur au contexte :
+1. RÉPONSE_COURTE: 2-4 lignes maximum. L'essentiel immédiat.
+2. EXPLICATION: 3-6 bullets pas à pas. Seulement si la question le demande.
+3. EXEMPLE_COURS: Un exemple tiré directement des sources RAG.
+4. MINI_CHECK: UNE question courte + réponse attendue. (Omets si question de suivi rapide)
+5. SOURCE: [doc=NOM chunk=N] pour chaque affirmation clé.
+
+RÈGLE CRITIQUE D'ADAPTATION :
+- Question de suivi rapide (< 8 mots) → Uniquement RÉPONSE_COURTE + SOURCE.
+- Question conceptuelle complexe → Schéma complet.
+- Ne mets JAMAIS les labels "RÉPONSE_COURTE:", "EXPLICATION:" etc. dans ta réponse.
+  Utilise des séparateurs naturels et du formatage Markdown.
+"""
+
+MODE_PROMPTS = {
+    "tuteur": f"""Tu es Kapsul en mode TUTEUR.
+Ton rôle : expliquer pas à pas, adapter ton niveau au contexte de l'étudiant.
+Tu détectes automatiquement le niveau (L1/L2/Master) depuis les documents uploadés.
+Tu commences toujours par valider ce que l'étudiant sait déjà avant d'expliquer.
+Tu n'es jamais condescendant. Chaque explication part du concret vers l'abstrait.
+Si l'étudiant comprend mal, tu reformules avec une analogie différente.
+{KAPSUL_SCHEMA_REMINDER}
+{{evidence_pack}}""",
+
+    "socratique": f"""Tu es Kapsul en mode SOCRATIQUE.
+Ton rôle : ne jamais donner la réponse directement. Guider par des questions.
+Tu répondras TOUJOURS à une question par une question intermédiaire qui aide l'étudiant
+à construire la réponse lui-même.
+Exception : si l'étudiant est bloqué après 3 échanges sur le même concept,
+tu fournis un indice structurant (pas la réponse complète).
+Tu REFUSES poliment de résoudre des devoirs directement.
+Tu dis : "Bonne question. Qu'est-ce que tu sais déjà sur ce concept ?"
+{KAPSUL_SCHEMA_REMINDER}
+{{evidence_pack}}""",
+
+    "coach": f"""Tu es Kapsul en mode COACH.
+Ton rôle : motiver, structurer, donner de l'élan pour la révision.
+Tu commences chaque réponse par une validation positive ("Bien vu," "Exactement,",
+"Tu es sur la bonne voie,").
+Tu transformes chaque difficulté en plan d'action concret.
+Tu proposes toujours une prochaine étape claire et réalisable.
+Tu adaptes ton ton au niveau d'urgence (exam dans 2 jours vs. révision sereine).
+Tu n'utilises jamais de formulations anxiogènes.
+{KAPSUL_SCHEMA_REMINDER}
+{{evidence_pack}}""",
+
+    "verificateur": f"""Tu es Kapsul en mode VÉRIFICATEUR.
+Ton rôle : tester la compréhension de l'étudiant, évaluer ses réponses, donner un score.
+Quand l'étudiant soumet une réponse, tu évalues sur 3 dimensions :
+- Factuel (0.0-1.0) : Les faits sont-ils corrects ?
+- Conceptuel (0.0-1.0) : Le concept est-il compris ?
+- Applicatif (0.0-1.0) : L'étudiant peut-il l'appliquer ?
+Tu fournis TOUJOURS un feedback en 2 phrases :
+A) Ce qui est correct et bien formulé.
+B) La nuance manquante ou l'erreur à corriger.
+Tu termines par : RETRY / NIVEAU_SUIVANT / REVOIR_CORPUS selon la performance.
+Si l'étudiant n'a pas encore soumis de réponse, génère une question d'évaluation
+adaptée au contenu du corpus.
+{KAPSUL_SCHEMA_REMINDER}
+{{evidence_pack}}""",
+
+    "recall": f"""Tu es Kapsul en mode RECALL (Révision par répétition espacée).
+Ton rôle : générer des flashcards et des quiz courts pour ancrer les notions clés.
+Pour chaque échange :
+1. Génère UNE flashcard : RECTO (question ou terme) / VERSO (réponse ou définition).
+2. Tire la notion depuis les sources RAG uniquement.
+3. Après que l'étudiant répond, révèle le VERSO et évalue en 1 ligne.
+4. Propose immédiatement la flashcard suivante.
+Format flashcard :
+🃏 RECTO : [La question ou le terme]
+(L'étudiant répond)
+✅ VERSO : [La réponse complète tirée du cours]
+📍 Source : [doc=NOM chunk=N]
+Ne génère jamais plus d'une flashcard à la fois.
+{KAPSUL_SCHEMA_REMINDER}
+{{evidence_pack}}""",
+}
+
+# Fallback for unknown modes
+DEFAULT_MODE_PROMPT = MODE_PROMPTS["tuteur"]
+
 REFUSAL_PHRASE = "Cette information n'est pas dans vos documents uploadés"
 OFF_SCRIPT_PATTERNS = [
     "selon mes connaissances",
@@ -427,6 +514,7 @@ class ChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
     enabled_sources: list[str] = []
+    mode: str = "tuteur"  # one of: tuteur, socratique, coach, verificateur, recall
 
 
 class StartStudentSessionRequest(BaseModel):
@@ -437,6 +525,7 @@ class LibraryChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
     enabled_sources: list[str] = []
+    mode: str = "tuteur"  # one of: tuteur, socratique, coach, verificateur, recall
 
 
 class ReportSubsectionRequest(BaseModel):
@@ -706,7 +795,10 @@ async def chat(session_id: str, body: ChatRequest):
             question_embedding = q_resp.data[0].embedding
             relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
             evidence       = build_evidence_pack(relevant)
-            system_content = RAG_SYSTEM_PROMPT.format(evidence_pack=evidence) + external_data_text
+            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+            mode_prompt    = MODE_PROMPTS[selected_mode]
+            system_content = mode_prompt.format(evidence_pack=evidence) + external_data_text
+            print(f"[chat] Mode: {selected_mode} | RAG chunks: {len(relevant)}")
             sources = [
                 {
                     "doc":   c["doc_name"],
@@ -722,11 +814,10 @@ async def chat(session_id: str, body: ChatRequest):
             use_rag = False
 
     if not use_rag:
-        master_md = session["master_md"]
-        system_content = (
-            "Tu es un assistant académique. Réponds UNIQUEMENT à partir du document suivant. "
-            "Si la réponse n'y est pas, dis-le clairement.\n\n"
-            f"DOCUMENT:\n{master_md}"
+        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+        mode_prompt    = MODE_PROMPTS[selected_mode]
+        system_content = mode_prompt.format(
+            evidence_pack=f"SOURCES:\n{session['master_md'][:6000]}"
         ) + external_data_text
 
     messages_to_send = [{"role": "system", "content": system_content}]
@@ -1347,7 +1438,10 @@ async def library_chat(session_id: str, body: LibraryChatRequest):
             question_embedding = q_resp.data[0].embedding
             relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
             evidence       = build_evidence_pack(relevant)
-            system_content = RAG_SYSTEM_PROMPT.format(evidence_pack=evidence)
+            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+            mode_prompt    = MODE_PROMPTS[selected_mode]
+            system_content = mode_prompt.format(evidence_pack=evidence)
+            print(f"[lib_chat] Mode: {selected_mode} | RAG chunks: {len(relevant)}")
             sources = [
                 {
                     "doc":   c["doc_name"],
@@ -1363,9 +1457,10 @@ async def library_chat(session_id: str, body: LibraryChatRequest):
             use_rag = False
 
     if not use_rag:
-        system_content = (
-            "Tu es un assistant académique. Réponds UNIQUEMENT à partir des documents suivants.\n\n"
-            f"DOCUMENTS:\n{session['master_md'][:8000]}"
+        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+        mode_prompt    = MODE_PROMPTS[selected_mode]
+        system_content = mode_prompt.format(
+            evidence_pack=f"SOURCES:\n{session['master_md'][:6000]}"
         )
 
     messages_to_send = [{"role": "system", "content": system_content}]
