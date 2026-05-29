@@ -7,16 +7,36 @@ import { ChatMessage, TypingIndicator } from './ChatMessage.jsx';
 import { ChatInputMvp } from './ChatInputMvp.jsx';
 import { MasterMDPreview } from './MasterMDPreview.jsx';
 
-const SUGGESTIONS_FR = [
-  'Résume les points clés →',
-  'Quels sont les concepts importants ?',
-  'Explique-moi ce cours en détail',
-];
-const SUGGESTIONS_EN = [
-  'Summarize the key points →',
-  'What are the important concepts?',
-  'Explain this course in detail',
-];
+const MODE_SUGGESTIONS = {
+  tuteur: {
+    fr: ['Explique ce concept pas à pas →', 'Qu\'est-ce que signifie... ?', 'Donne-moi un exemple du cours'],
+    en: ['Explain this concept step by step →', 'What does this mean?', 'Give me an example from the course'],
+  },
+  socratique: {
+    fr: ['Je ne comprends pas ce concept', 'Comment fonctionne... ?', 'Aide-moi à réfléchir sur...'],
+    en: ['I don\'t understand this concept', 'How does this work?', 'Help me think through...'],
+  },
+  coach: {
+    fr: ['J\'ai un examen dans 2 jours', 'Crée mon plan de révision', 'Motive-moi pour réviser'],
+    en: ['I have an exam in 2 days', 'Create my revision plan', 'Help me get motivated'],
+  },
+  verificateur: {
+    fr: ['Teste ma compréhension', 'Génère un quiz sur ce chapitre', 'Évalue ma réponse :'],
+    en: ['Test my understanding', 'Generate a quiz on this chapter', 'Evaluate my answer:'],
+  },
+  recall: {
+    fr: ['Lance les flashcards', 'Révise les concepts clés', 'Mode flashcard sur ce cours'],
+    en: ['Start flashcards', 'Revise key concepts', 'Flashcard mode for this course'],
+  },
+};
+
+const MODE_TITLES = {
+  tuteur:       { fr: 'Que souhaitez-vous apprendre ?',    en: 'What would you like to learn?' },
+  socratique:   { fr: 'Posez votre question.',              en: 'Ask your question.' },
+  coach:        { fr: 'Prêt à réviser ?',                  en: 'Ready to revise?' },
+  verificateur: { fr: 'Prêt à être testé ?',               en: 'Ready to be tested?' },
+  recall:       { fr: 'Mode Flashcards activé.',           en: 'Flashcard mode active.' },
+};
 
 function newMsgId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -62,6 +82,7 @@ export function StudentLibrary() {
   const [loadingChat, setLoadingChat] = useState(false);
   const [showPreview, setShowPreview] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
   const [mobilePreview, setMobilePreview] = useState(false);
+  const [activeMode, setActiveMode] = useState('tuteur');
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -160,12 +181,17 @@ export function StudentLibrary() {
         alert(e.message || 'Chat error');
         setMessages((m) => dropEmptyAssistantTail(m));
       },
-    });
-  }, [sessionId, messages, streaming]);
+    }, [], activeMode);
+  }, [sessionId, messages, streaming, activeMode]);
 
   // ── Chat phase ──
   if (chatActive && sessionId) {
-    const suggests = fr ? SUGGESTIONS_FR : SUGGESTIONS_EN;
+    const suggests = fr
+      ? MODE_SUGGESTIONS[activeMode]?.fr || MODE_SUGGESTIONS.tuteur.fr
+      : MODE_SUGGESTIONS[activeMode]?.en || MODE_SUGGESTIONS.tuteur.en;
+    const emptyTitle = fr
+      ? MODE_TITLES[activeMode]?.fr || MODE_TITLES.tuteur.fr
+      : MODE_TITLES[activeMode]?.en || MODE_TITLES.tuteur.en;
     return (
       <div style={{
         flex: 1, display: 'flex', minHeight: 0, minWidth: 0,
@@ -209,7 +235,7 @@ export function StudentLibrary() {
             {messages.length === 0 && !loadingChat ? (
               <div style={{ maxWidth: 560, margin: '48px auto 0', textAlign: 'center' }}>
                 <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 600 }}>
-                  {fr ? 'Vos cours sont prêts.' : 'Your courses are ready.'}
+                  {emptyTitle}
                 </h2>
                 <p style={{ margin: '0 0 24px', fontSize: 14, color: k.textMuted }}>
                   {fr ? 'Posez n\'importe quelle question sur vos documents.' : 'Ask anything about your documents.'}
@@ -232,6 +258,7 @@ export function StudentLibrary() {
                     key={msg.id ?? `msg-${i}`}
                     k={k}
                     isV2={isV2}
+                    lang={lang}
                     msg={msg}
                     streaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
                   />
@@ -253,6 +280,8 @@ export function StudentLibrary() {
             onAddFiles={() => {}}
             enabledSources={[]}
             onSourceToggle={() => {}}
+            activeMode={activeMode}
+            onModeChange={setActiveMode}
           />
         </div>
 

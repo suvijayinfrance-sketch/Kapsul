@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KapsulIcons as Ic } from '../icons.jsx';
 
 const ACCEPT = '.pdf,.docx,.pptx,.txt';
@@ -45,12 +45,22 @@ function generateShadowPills(text, currentMode, fr) {
 export function ChatInputMvp({
   k, isV2, v, placeholder, onSend, onAddFiles, disabled, lang, attachDisabled,
   enabledSources = [], onSourceToggle,
-  activeMode = 'tuteur', onModeChange = () => {},
+  activeMode = 'tuteur', onModeChange,
 }) {
   const [inputValue, setInputValue] = useState('');
   const [shadowPills, setShadowPills] = useState([]);
+  const [selectedMode, setSelectedMode] = useState(activeMode);
   const fileRef = useRef(null);
   const fr = lang === 'fr';
+
+  useEffect(() => {
+    setSelectedMode(activeMode);
+  }, [activeMode]);
+
+  const selectMode = (modeId) => {
+    setSelectedMode(modeId);
+    onModeChange?.(modeId);
+  };
 
   const LEARNING_MODES = [
     {
@@ -115,7 +125,7 @@ export function ChatInputMvp({
 
   const handlePillClick = (pill) => {
     if (pill.type === 'mode' && pill.targetMode) {
-      onModeChange(pill.targetMode);
+      selectMode(pill.targetMode);
       setShadowPills((prev) => prev.filter((p) => p.id !== pill.id));
       return;
     }
@@ -164,14 +174,21 @@ export function ChatInputMvp({
           overflowX: 'auto',
           scrollbarWidth: 'none',
           background: isV2 ? 'rgba(0,0,0,0.1)' : '#FAFAFA',
+          position: 'relative',
+          zIndex: 2,
+          touchAction: 'pan-x',
         }}>
           {LEARNING_MODES.map((mode) => {
-            const isActive = activeMode === mode.id;
+            const isActive = selectedMode === mode.id;
             return (
               <button
                 key={mode.id}
                 type="button"
-                onClick={() => onModeChange(mode.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  selectMode(mode.id);
+                }}
                 title={mode.desc}
                 style={{
                   display: 'inline-flex',
@@ -191,6 +208,8 @@ export function ChatInputMvp({
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
+                  touchAction: 'manipulation',
+                  pointerEvents: 'auto',
                 }}
               >
                 <span style={{ fontSize: 13 }}>{mode.icon}</span>
@@ -385,7 +404,7 @@ export function ChatInputMvp({
             onChange={(e) => {
               const val = e.target.value;
               setInputValue(val);
-              setShadowPills(generateShadowPills(val, activeMode, fr));
+              setShadowPills(generateShadowPills(val, selectedMode, fr));
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
