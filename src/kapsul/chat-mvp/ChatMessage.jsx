@@ -1,5 +1,30 @@
 import React from 'react';
 
+const MODE_COLORS = {
+  explication: '#2563EB',
+  socratique: '#7C3AED',
+  entrainement: '#F97316',
+  verification: '#22C55E',
+  revision: '#6D28D9',
+};
+
+const SCHEMA_SECTION_COLORS = {
+  'Réponse courte': '#64748B',
+  Explication: '#2563EB',
+  Exemple: '#F97316',
+  'Mini-question': '#22C55E',
+  Sources: '#06B6D4',
+};
+
+const KAPSUL_CARD_STYLE = {
+  background: '#FFFFFF',
+  border: '1px solid #E5E7EB',
+  boxShadow: '0 4px 14px rgba(15, 23, 42, 0.06)',
+  borderRadius: 16,
+};
+
+const SCHEMA_HEADER_RE = /\*\*(Réponse courte|Explication|Exemple|Mini-question|Sources)\*\*/g;
+
 function TypingDots({ color }) {
   return (
     <span style={{ display: 'inline-flex', gap: 5, marginLeft: 4, verticalAlign: 'middle' }}>
@@ -14,6 +39,30 @@ function TypingDots({ color }) {
       ))}
     </span>
   );
+}
+
+function renderColoredContent(content) {
+  if (!content) return null;
+  const parts = content.split(SCHEMA_HEADER_RE);
+  return parts.map((part, i) => {
+    const color = SCHEMA_SECTION_COLORS[part];
+    if (color) {
+      return (
+        <span key={i} style={{ color, fontWeight: 700 }}>
+          {part}
+        </span>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
+function highestSourceScore(sources) {
+  if (!sources?.length) return null;
+  return sources.reduce((max, s) => {
+    if (s.score == null) return max;
+    return max == null ? s.score : Math.max(max, s.score);
+  }, null);
 }
 
 function CitationBlock({ sources, isV2 }) {
@@ -147,7 +196,6 @@ function CitationBlock({ sources, isV2 }) {
   );
 }
 
-/** Stable assistant body — no ReactMarkdown (incompatible with React 19 streaming updates). */
 function AssistantBody({ content, streaming, textColor }) {
   const waiting = streaming && !content;
   return (
@@ -159,7 +207,7 @@ function AssistantBody({ content, streaming, textColor }) {
         <TypingDots color={textColor} />
       ) : (
         <>
-          {content || (
+          {content ? renderColoredContent(content) : (
             <span style={{ fontStyle: 'italic', opacity: 0.7 }}>(No response text)</span>
           )}
           {streaming && content ? <span className="kapsul-mvp-cursor"> ▋</span> : null}
@@ -173,12 +221,50 @@ export function ChatMessage({ k, isV2, msg, streaming, lang = 'fr' }) {
   const user = msg.role === 'user';
   const fr = lang === 'fr';
   const showCitations = !streaming && msg.role === 'assistant' && msg.sources?.length > 0;
+  const maxScore = highestSourceScore(msg.sources);
+  const modeColor = msg.mode ? MODE_COLORS[msg.mode] : null;
+
+  const assistantBubbleStyle = user
+    ? {
+        padding: '12px 16px',
+        background: k.primary,
+        color: '#fff',
+        borderRadius: isV2 ? 4 : 14,
+        borderTopLeftRadius: isV2 ? 4 : 14,
+        fontSize: 14,
+        lineHeight: 1.55,
+        border: 'none',
+      }
+    : {
+        padding: '12px 16px',
+        ...(isV2
+          ? {
+              background: k.surfaceAlt,
+              color: k.text,
+              borderRadius: 4,
+              borderTopLeftRadius: 4,
+              border: `1px solid ${k.border}`,
+            }
+          : {
+              ...KAPSUL_CARD_STYLE,
+              ...(modeColor ? { border: `1px solid ${modeColor}` } : {}),
+              color: k.text,
+              borderTopLeftRadius: 4,
+            }),
+        fontSize: 15,
+        lineHeight: 1.55,
+      };
 
   return (
-    <div style={{
-      display: 'flex', justifyContent: user ? 'flex-end' : 'flex-start',
-      marginBottom: 16, alignItems: 'flex-start',
-    }}>
+    <div
+      className={!user ? 'kapsul-assistant-msg' : undefined}
+      style={{
+        display: 'flex',
+        justifyContent: user ? 'flex-end' : 'flex-start',
+        marginBottom: 16,
+        alignItems: 'flex-start',
+      }}
+    >
       {!user && (
         <div style={{
           width: 32, height: 32, marginRight: 10, flexShrink: 0,
@@ -189,15 +275,52 @@ export function ChatMessage({ k, isV2, msg, streaming, lang = 'fr' }) {
         }}>K</div>
       )}
       <div style={{ maxWidth: user ? '75%' : '85%' }}>
-        <div style={{
-          padding: '12px 16px',
-          background: user ? k.primary : (isV2 ? k.surfaceAlt : '#F1F5F9'),
-          color: user ? '#fff' : k.text,
-          borderRadius: isV2 ? 4 : 14,
-          borderTopLeftRadius: user ? (isV2 ? 4 : 14) : 4,
-          fontSize: 14, lineHeight: 1.55,
-          border: !user && isV2 ? `1px solid ${k.border}` : 'none',
-        }}>
+        <div style={assistantBubbleStyle}>
+          {msg.role === 'assistant' && msg.content && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 8,
+              paddingBottom: 8,
+              borderBottom: '1px solid #F1F5F9',
+              fontSize: 11,
+              color: '#94A3B8',
+              fontWeight: 500,
+            }}>
+              <span style={{ color: '#22C55E', fontWeight: 600 }}>
+                Confiance {maxScore != null
+                  ? `${Math.round(maxScore * 100)}%`
+                  : '—'}
+              </span>
+              <span>·</span>
+              <span>
+                Couverture {msg.sources?.length > 0
+                  ? `${msg.sources.length}/5`
+                  : '—'}
+              </span>
+              <span>·</span>
+              <span>L3</span>
+              <span>·</span>
+              <span>
+                {Math.max(1, Math.ceil(msg.content.split(' ').length / 200))} min
+              </span>
+              {msg.mode && MODE_COLORS[msg.mode] && (
+                <>
+                  <span>·</span>
+                  <span style={{
+                    color: MODE_COLORS[msg.mode],
+                    fontWeight: 600,
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}>
+                    {msg.mode}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           {user ? (
             msg.content
           ) : (
@@ -206,18 +329,54 @@ export function ChatMessage({ k, isV2, msg, streaming, lang = 'fr' }) {
           {showCitations && (
             <CitationBlock sources={msg.sources} isV2={isV2} />
           )}
+          {msg.role === 'assistant' && msg.content && !streaming && (
+            <div style={{
+              display: 'flex',
+              gap: 6,
+              marginTop: 10,
+              flexWrap: 'wrap',
+            }}>
+              {[
+                { label: 'Ajouter au document', color: '#2563EB', bg: '#EFF6FF' },
+                { label: 'Créer flashcard', color: '#6D28D9', bg: '#F5F3FF' },
+                { label: 'Me tester', color: '#22C55E', bg: '#F0FDF4' },
+              ].map((btn) => (
+                <button
+                  key={btn.label}
+                  type="button"
+                  onClick={() => console.log(`${btn.label} clicked`)}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    border: `1px solid ${btn.color}30`,
+                    background: btn.bg,
+                    color: btn.color,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.75'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          )}
           {msg.role === 'assistant' && msg.content.includes('🃏 RECTO') && (
             <div style={{
               marginTop: 10,
               padding: '10px 14px',
               borderRadius: 8,
-              background: isV2 ? 'rgba(220,38,38,0.1)' : '#FEF2F2',
-              border: `1px solid ${isV2 ? 'rgba(220,38,38,0.3)' : '#FECACA'}`,
+              background: isV2 ? 'rgba(109,40,217,0.1)' : '#F5F3FF',
+              border: `1px solid ${isV2 ? 'rgba(109,40,217,0.3)' : '#DDD6FE'}`,
               fontSize: 12,
-              color: isV2 ? '#FCA5A5' : '#DC2626',
+              color: isV2 ? '#C4B5FD' : '#6D28D9',
               fontWeight: 600,
             }}>
-              🃏 {fr ? 'Mode Recall actif — répondez pour voir le verso' : 'Recall mode active — answer to reveal the back'}
+              🃏 {fr ? 'Mode Révision actif — répondez pour voir le verso' : 'Revision mode active — answer to reveal the back'}
             </div>
           )}
         </div>
@@ -242,8 +401,10 @@ export function TypingIndicator({ k, isV2 }) {
         color: '#fff', fontWeight: 700, fontSize: 13,
       }}>K</div>
       <div style={{
-        padding: '12px 16px', background: isV2 ? k.surfaceAlt : '#fff',
-        border: `1px solid ${k.border}`, borderRadius: isV2 ? 4 : 14,
+        padding: '12px 16px',
+        ...(isV2
+          ? { background: k.surfaceAlt, border: `1px solid ${k.border}`, borderRadius: 4 }
+          : { ...KAPSUL_CARD_STYLE }),
         display: 'flex', gap: 6,
       }}>
         <TypingDots color={k.textMuted} />

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Kapsul · Student UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { font-family: var(--kp-font-sans); background: #F8FAFC; color: #111827; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(12px) scale(.96); } to { opacity:1; transform:translateX(-50%) translateY(0) scale(1); } }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="primitives.jsx"></script>
+<script type="text/babel" src="Sidebar.jsx"></script>
+<script type="text/babel" src="Hub.jsx"></script>
+<script type="text/babel" src="ChatPanel.jsx"></script>
+<script type="text/babel" src="EditorPanel.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef } = React;
+
+function App() {
+  // Hub is the default home screen
+  const [view, setView] = useState('hub');
+  const [editorOpen, setEditorOpen] = useState(true);
+  const [editorHighlight, setEditorHighlight] = useState(false);
+  const [messages, setMessages] = useState([
+    { role: 'user', mode: 'explain', text: "Explique-moi la théorie de la charge cognitive de Sweller, avec un exemple tiré du CM3." },
+    { role: 'ai',   mode: 'explain', text: '' },
+  ]);
+
+  const onSend = (txt, mode = 'explain') => {
+    setMessages(m => [
+      ...m,
+      { role: 'user', mode, text: txt },
+      { role: 'ai',   mode, text: '' }
+    ]);
+  };
+
+  const onAddToDoc = () => {
+    setEditorHighlight(true);
+    setTimeout(() => setEditorHighlight(false), 1200);
+  };
+
+
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}
+         data-screen-label={view === 'hub' ? '01 Hub' : '02 Chat IA'}>
+      <Sidebar active={view} onNav={setView} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+
+        {/* App header */}
+        <header style={{
+          height: 52, padding: '0 24px', display: 'flex', alignItems: 'center', gap: 14,
+          borderBottom: '1px solid #E5E7EB', background: 'rgba(255,255,255,.9)',
+          backdropFilter: 'blur(10px)', flexShrink: 0,
+        }}>
+          <KMark size={26} />
+          <h2 style={{
+            margin: 0, fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em',
+            background: 'linear-gradient(90deg,#2563EB,#06B6D4,#F97316)',
+            WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+          }}>{view === 'hub' ? 'Hub' : view === 'chat' ? 'Chat IA' : 'Kapsul'}</h2>
+          <div style={{ flex: 1 }} />
+          <div style={{ position: 'relative' }}>
+            <input placeholder="Chercher partout…" style={{
+              padding: '7px 14px 7px 34px', borderRadius: 9, border: '1px solid #E5E7EB',
+              fontFamily: 'inherit', fontSize: 13, width: 240, background: '#F8FAFC',
+              outline: 'none', color: '#374151',
+            }} />
+            <span style={{ position: 'absolute', left: 11, top: 8 }}>
+              <Icon name="search" size={15} color="#9CA3AF" />
+            </span>
+          </div>
+          <IconBtn icon="bell" />
+          <div style={{
+            width: 30, height: 30, borderRadius: '50%', background: '#CBD5E1',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer',
+          }}>CD</div>
+        </header>
+
+        {/* Main area */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          {view === 'hub' && <Hub onNav={setView} />}
+          {view === 'chat' && (
+            <>
+              <ChatPanel onAddToDoc={onAddToDoc} />
+              {editorOpen && <EditorPanel onClose={() => setEditorOpen(false)} highlight={editorHighlight} />}
+              {!editorOpen && (
+                <button onClick={() => setEditorOpen(true)} style={{
+                  width: 36, alignSelf: 'center', margin: '0 8px',
+                  background: '#F1F5F9', border: '1px solid #E5E7EB', borderRadius: 10,
+                  padding: '12px 6px', cursor: 'pointer', color: '#6B7280',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 600,
+                }}>
+                  <Icon name="panel-right" size={16} color="#6B7280" />Doc
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

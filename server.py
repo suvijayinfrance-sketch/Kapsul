@@ -9,7 +9,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, Optional
 
@@ -181,91 +181,104 @@ Si l'étudiant pose une question hors-sujet, réponds UNIQUEMENT :
 {evidence_pack}"""
 
 # ── PEDAGOGICAL MODE SYSTEM PROMPTS ──────────────────────────────────────────
-# Each prompt enforces the Standard Kapsul response schema
-# while adapting the AI's pedagogical behaviour.
+# Module-level constants; chat endpoints select via body.mode (fallback: explication).
 
-KAPSUL_SCHEMA_REMINDER = """
-FORMAT DE RÉPONSE OBLIGATOIRE (Standard Kapsul) :
-Tu DOIS structurer ta réponse ainsi — adapte la longueur au contexte :
-1. RÉPONSE_COURTE: 2-4 lignes maximum. L'essentiel immédiat.
-2. EXPLICATION: 3-6 bullets pas à pas. Seulement si la question le demande.
-3. EXEMPLE_COURS: Un exemple tiré directement des sources RAG.
-4. MINI_CHECK: UNE question courte + réponse attendue. (Omets si question de suivi rapide)
-5. SOURCE: [doc=NOM chunk=N] pour chaque affirmation clé.
+RAG_GROUNDING_RULES = """
+RÈGLES RAG :
+- Réponds UNIQUEMENT à partir des SOURCES ci-dessous.
+- Si l'information n'est pas dans les SOURCES : "Cette information n'est pas dans vos documents uploadés."
+- Cite chaque affirmation clé avec [doc=FILENAME chunk=N] en fin de réponse.
+"""
 
-RÈGLE CRITIQUE D'ADAPTATION :
-- Question de suivi rapide (< 8 mots) → Uniquement RÉPONSE_COURTE + SOURCE.
-- Question conceptuelle complexe → Schéma complet.
-- Ne mets JAMAIS les labels "RÉPONSE_COURTE:", "EXPLICATION:" etc. dans ta réponse.
-  Utilise des séparateurs naturels et du formatage Markdown.
+KAPSUL_EXPLICATION_SCHEMA = """
+FORMAT DE RÉPONSE (Standard Kapsul) — structure chaque réponse ainsi :
+1. Réponse courte (2-4 lignes maximum)
+2. Explication pas à pas (3-6 bullets maximum)
+3. Exemple lié au cours (tiré directement des sources RAG)
+4. Mini-check (1 question + réponse attendue)
+5. Sources RAG (références doc/page/chunk : [doc=FILENAME chunk=N])
+
+RÈGLE SUIVI :
+Si la question est courte ou de suivi, réponds uniquement avec la Réponse Courte et l'Exemple. Omets le Mini-Check.
+
+Ne mets pas les labels numérotés dans ta réponse — utilise du Markdown naturel.
 """
 
 MODE_PROMPTS = {
-    "tuteur": f"""Tu es Kapsul en mode TUTEUR.
+    "explication": f"""Tu es Kapsul en mode EXPLICATION.
 Ton rôle : expliquer pas à pas, adapter ton niveau au contexte de l'étudiant.
 Tu détectes automatiquement le niveau (L1/L2/Master) depuis les documents uploadés.
 Tu commences toujours par valider ce que l'étudiant sait déjà avant d'expliquer.
 Tu n'es jamais condescendant. Chaque explication part du concret vers l'abstrait.
 Si l'étudiant comprend mal, tu reformules avec une analogie différente.
-{KAPSUL_SCHEMA_REMINDER}
+Tu ne fournis JAMAIS la réponse directe à un devoir ou exercice noté — guide l'étudiant.
+{KAPSUL_EXPLICATION_SCHEMA}
+{RAG_GROUNDING_RULES}
 {{evidence_pack}}""",
 
     "socratique": f"""Tu es Kapsul en mode SOCRATIQUE.
-Ton rôle : ne jamais donner la réponse directement. Guider par des questions.
-Tu répondras TOUJOURS à une question par une question intermédiaire qui aide l'étudiant
-à construire la réponse lui-même.
+Ton rôle : guider UNIQUEMENT par des questions. Ne fournis jamais la réponse directement.
+Ne fournis jamais la réponse directement — même si l'étudiant insiste.
+Tu répondras TOUJOURS à une question par une ou deux questions intermédiaires qui aident
+l'étudiant à construire la réponse lui-même.
 Exception : si l'étudiant est bloqué après 3 échanges sur le même concept,
 tu fournis un indice structurant (pas la réponse complète).
 Tu REFUSES poliment de résoudre des devoirs directement.
 Tu dis : "Bonne question. Qu'est-ce que tu sais déjà sur ce concept ?"
-{KAPSUL_SCHEMA_REMINDER}
+N'utilise PAS le format Standard Kapsul (pas de réponse courte structurée, pas de mini-check).
+Réponds en 2-4 phrases de questions uniquement, puis une invitation à réfléchir.
+{RAG_GROUNDING_RULES}
 {{evidence_pack}}""",
 
-    "coach": f"""Tu es Kapsul en mode COACH.
-Ton rôle : motiver, structurer, donner de l'élan pour la révision.
+    "entrainement": f"""Tu es Kapsul en mode ENTRAÎNEMENT.
+Ton rôle : motiver, structurer un plan de révision, donner de l'élan positif.
 Tu commences chaque réponse par une validation positive ("Bien vu," "Exactement,",
 "Tu es sur la bonne voie,").
-Tu transformes chaque difficulté en plan d'action concret.
-Tu proposes toujours une prochaine étape claire et réalisable.
+Tu transformes chaque difficulté en plan d'action concret (étapes numérotées, durées réalistes).
+Tu proposes toujours une prochaine étape claire et réalisable pour la révision.
 Tu adaptes ton ton au niveau d'urgence (exam dans 2 jours vs. révision sereine).
 Tu n'utilises jamais de formulations anxiogènes.
-{KAPSUL_SCHEMA_REMINDER}
+N'utilise PAS le format Standard Kapsul — format motivationnel :
+encouragement → plan de révision (3-5 étapes) → prochaine action.
+{RAG_GROUNDING_RULES}
 {{evidence_pack}}""",
 
-    "verificateur": f"""Tu es Kapsul en mode VÉRIFICATEUR.
+    "verification": f"""Tu es Kapsul en mode VÉRIFICATION.
 Ton rôle : tester la compréhension de l'étudiant, évaluer ses réponses, donner un score.
-Quand l'étudiant soumet une réponse, tu évalues sur 3 dimensions :
+Quand l'étudiant soumet une réponse, tu évalues sur au moins 2 dimensions :
 - Factuel (0.0-1.0) : Les faits sont-ils corrects ?
 - Conceptuel (0.0-1.0) : Le concept est-il compris ?
-- Applicatif (0.0-1.0) : L'étudiant peut-il l'appliquer ?
-Tu fournis TOUJOURS un feedback en 2 phrases :
+(Optionnel) Applicatif (0.0-1.0) : L'étudiant peut-il l'appliquer ?
+Tu fournis TOUJOURS un feedback structuré :
 A) Ce qui est correct et bien formulé.
-B) La nuance manquante ou l'erreur à corriger.
+B) Ce qui manque, est incomplet ou erroné.
 Tu termines par : RETRY / NIVEAU_SUIVANT / REVOIR_CORPUS selon la performance.
 Si l'étudiant n'a pas encore soumis de réponse, génère une question d'évaluation
 adaptée au contenu du corpus.
-{KAPSUL_SCHEMA_REMINDER}
+N'utilise PAS le format Standard Kapsul (pas de mini-check pédagogique).
+{RAG_GROUNDING_RULES}
 {{evidence_pack}}""",
 
-    "recall": f"""Tu es Kapsul en mode RECALL (Révision par répétition espacée).
-Ton rôle : générer des flashcards et des quiz courts pour ancrer les notions clés.
+    "revision": f"""Tu es Kapsul en mode RÉVISION (répétition espacée).
+Ton rôle : ancrer les notions clés par flashcards, une à la fois.
 Pour chaque échange :
-1. Génère UNE flashcard : RECTO (question ou terme) / VERSO (réponse ou définition).
-2. Tire la notion depuis les sources RAG uniquement.
-3. Après que l'étudiant répond, révèle le VERSO et évalue en 1 ligne.
-4. Propose immédiatement la flashcard suivante.
-Format flashcard :
+1. Présente UNE flashcard — RECTO uniquement (concept ou question).
+2. Attends que l'étudiant tente de se souvenir / répondre.
+3. Révèle ensuite le VERSO (réponse complète tirée du cours).
+4. Propose la flashcard suivante.
+Format obligatoire :
 🃏 RECTO : [La question ou le terme]
-(L'étudiant répond)
+(L'étudiant répond — ne révèle pas le verso avant sa tentative)
 ✅ VERSO : [La réponse complète tirée du cours]
-📍 Source : [doc=NOM chunk=N]
+📍 Source : [doc=FILENAME chunk=N]
 Ne génère jamais plus d'une flashcard à la fois.
-{KAPSUL_SCHEMA_REMINDER}
+N'utilise PAS le format Standard Kapsul.
+{RAG_GROUNDING_RULES}
 {{evidence_pack}}""",
 }
 
 # Fallback for unknown modes
-DEFAULT_MODE_PROMPT = MODE_PROMPTS["tuteur"]
+DEFAULT_MODE_PROMPT = MODE_PROMPTS["explication"]
 
 REFUSAL_PHRASE = "Cette information n'est pas dans vos documents uploadés"
 OFF_SCRIPT_PATTERNS = [
@@ -514,7 +527,7 @@ class ChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
     enabled_sources: list[str] = []
-    mode: str = "tuteur"  # one of: tuteur, socratique, coach, verificateur, recall
+    mode: str = "explication"  # one of: explication, socratique, entrainement, verification, revision
 
 
 class StartStudentSessionRequest(BaseModel):
@@ -525,7 +538,7 @@ class LibraryChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = []
     enabled_sources: list[str] = []
-    mode: str = "tuteur"  # one of: tuteur, socratique, coach, verificateur, recall
+    mode: str = "explication"  # one of: explication, socratique, entrainement, verification, revision
 
 
 class ReportSubsectionRequest(BaseModel):
@@ -795,7 +808,7 @@ async def chat(session_id: str, body: ChatRequest):
             question_embedding = q_resp.data[0].embedding
             relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
             evidence       = build_evidence_pack(relevant)
-            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "explication"
             mode_prompt    = MODE_PROMPTS[selected_mode]
             system_content = mode_prompt.format(evidence_pack=evidence) + external_data_text
             print(f"[chat] Mode: {selected_mode} | RAG chunks: {len(relevant)}")
@@ -814,7 +827,7 @@ async def chat(session_id: str, body: ChatRequest):
             use_rag = False
 
     if not use_rag:
-        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "explication"
         mode_prompt    = MODE_PROMPTS[selected_mode]
         system_content = mode_prompt.format(
             evidence_pack=f"SOURCES:\n{session['master_md'][:6000]}"
@@ -1438,7 +1451,7 @@ async def library_chat(session_id: str, body: LibraryChatRequest):
             question_embedding = q_resp.data[0].embedding
             relevant       = find_relevant_chunks(question_embedding, chunks, top_k=5)
             evidence       = build_evidence_pack(relevant)
-            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+            selected_mode  = body.mode if body.mode in MODE_PROMPTS else "explication"
             mode_prompt    = MODE_PROMPTS[selected_mode]
             system_content = mode_prompt.format(evidence_pack=evidence)
             print(f"[lib_chat] Mode: {selected_mode} | RAG chunks: {len(relevant)}")
@@ -1457,7 +1470,7 @@ async def library_chat(session_id: str, body: LibraryChatRequest):
             use_rag = False
 
     if not use_rag:
-        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "tuteur"
+        selected_mode  = body.mode if body.mode in MODE_PROMPTS else "explication"
         mode_prompt    = MODE_PROMPTS[selected_mode]
         system_content = mode_prompt.format(
             evidence_pack=f"SOURCES:\n{session['master_md'][:6000]}"
@@ -1505,3 +1518,165 @@ async def library_chat(session_id: str, body: LibraryChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/student/dashboard/{session_id}")
+def student_dashboard(session_id: str):
+    """
+    Returns all data needed for the student dashboard.
+    Combines: morning briefing text, priority concepts,
+    weekly progress, mastery by course.
+    """
+    db = get_db()
+
+    session = get_session_with_fallback(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = []
+    try:
+        if db:
+            res = db.table("student_messages")\
+                    .select("role,content,created_at")\
+                    .eq("session_id", session_id)\
+                    .order("created_at")\
+                    .execute()
+            messages = res.data or []
+    except Exception:
+        messages = session.get("messages", [])
+
+    today = datetime.now(timezone.utc)
+    week_days = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        day_label = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"][day.weekday()]
+        day_str = day.strftime("%Y-%m-%d")
+        count = sum(
+            1 for m in messages
+            if m.get("created_at", "")[:10] == day_str
+            and m.get("role") == "user"
+        )
+        week_days.append({"day": day_label, "count": count, "date": day_str})
+
+    week_total = sum(d["count"] for d in week_days)
+    sessions_done = sum(1 for d in week_days if d["count"] > 0)
+
+    concepts = []
+    try:
+        if db:
+            res = db.table("concept_mastery")\
+                    .select("*")\
+                    .eq("session_id", session_id)\
+                    .execute()
+            concepts = res.data or []
+    except Exception:
+        concepts = []
+
+    priority_concepts = []
+    for c in concepts:
+        try:
+            last_reviewed = datetime.fromisoformat(
+                c.get("last_reviewed", str(today)).replace("Z", "+00:00")
+            )
+            days_since = max(1, (today - last_reviewed).days)
+            avg_mastery = max(0.01, (
+                c.get("memorisation", 0) +
+                c.get("comprehension", 0) +
+                c.get("application", 0)
+            ) / 3)
+            score = (c.get("exam_weight", 1) * max(1, c.get("error_frequency", 1))) \
+                    / (days_since * avg_mastery)
+            priority_concepts.append({**c, "priority_score": round(score, 2)})
+        except Exception:
+            continue
+
+    priority_concepts.sort(key=lambda x: x["priority_score"], reverse=True)
+    top_concepts = priority_concepts[:3]
+
+    courses = {}
+    for c in concepts:
+        course = c.get("course", "Cours général")
+        if course not in courses:
+            courses[course] = {"name": course, "concepts": [], "avg_mastery": 0}
+        courses[course]["concepts"].append(c)
+
+    course_list = []
+    for course_name, data in courses.items():
+        if data["concepts"]:
+            avg = sum(
+                (c.get("memorisation", 0) + c.get("comprehension", 0) + c.get("application", 0)) / 3
+                for c in data["concepts"]
+            ) / len(data["concepts"])
+            course_list.append({
+                "name":           course_name,
+                "concept_count":  len(data["concepts"]),
+                "avg_mastery":    round(avg, 2),
+                "memorisation":   round(sum(c.get("memorisation", 0) for c in data["concepts"]) / len(data["concepts"]), 2),
+                "comprehension":  round(sum(c.get("comprehension", 0) for c in data["concepts"]) / len(data["concepts"]), 2),
+                "application":    round(sum(c.get("application", 0) for c in data["concepts"]) / len(data["concepts"]), 2),
+            })
+
+    doc_names = session.get("files", [])
+    recent_concepts = [c.get("concept", "") for c in concepts[-3:]] if concepts else []
+
+    return {
+        "week_days":        week_days,
+        "sessions_done":    sessions_done,
+        "week_total":       week_total,
+        "top_concepts":     top_concepts,
+        "courses":          course_list,
+        "doc_count":        len(doc_names),
+        "message_count":    len([m for m in messages if m.get("role") == "user"]),
+        "recent_concepts":  recent_concepts,
+        "has_data":         len(concepts) > 0,
+    }
+
+
+@app.post("/api/student/morning-briefing/{session_id}")
+async def morning_briefing(session_id: str):
+    """
+    Generate a personalised morning briefing message using Mistral.
+    Returns a short motivating text with today's priority action.
+    """
+    if not client:
+        return {"briefing": "Bonjour ! Prêt à travailler sur vos cours aujourd'hui ?"}
+
+    try:
+        dashboard = student_dashboard(session_id)
+    except Exception:
+        return {"briefing": "Bonjour ! Commencez votre session d'aujourd'hui."}
+
+    top = dashboard.get("top_concepts", [])
+    sessions_done = dashboard.get("sessions_done", 0)
+    week_total = dashboard.get("week_total", 0)
+
+    top_concept_text = ""
+    if top:
+        top_concept_text = f"Le concept prioritaire aujourd'hui est '{top[0].get('concept', '')}' ({top[0].get('course', '')})."
+
+    prompt = f"""Tu es Kapsul, un tuteur pédagogique bienveillant et motivant.
+Génère un message de briefing matinal COURT (2-3 phrases maximum) pour cet étudiant.
+
+Données de l'étudiant cette semaine :
+- Sessions de travail complétées : {sessions_done}/7 jours
+- Messages échangés : {week_total}
+- {top_concept_text}
+
+RÈGLES :
+- Commence toujours par "Bonjour !" ou une variante chaleureuse
+- Mentionne un accomplissement concret si possible (ex: "Tu as consolidé X concepts hier")
+- Termine par l'objectif du jour en une phrase claire et motivante
+- Ton : bienveillant, encourageant, direct. Jamais anxiogène.
+- Maximum 3 phrases. Pas de listes. Pas de titres.
+- En français uniquement."""
+
+    try:
+        response = client.chat.complete(
+            model="mistral-small-latest",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        briefing = response.choices[0].message.content or "Bonjour ! Prêt pour une nouvelle session ?"
+        return {"briefing": briefing.strip()}
+    except Exception as e:
+        print(f"[briefing] Failed: {e}")
+        return {"briefing": "Bonjour ! Votre session d'aujourd'hui vous attend. Bonne révision ! 🎯"}

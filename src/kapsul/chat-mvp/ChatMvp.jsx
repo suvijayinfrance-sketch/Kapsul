@@ -13,7 +13,7 @@ import { MasterMDPreview } from './MasterMDPreview.jsx';
 import './chat-mvp.css';
 
 const MODE_SUGGESTIONS = {
-  tuteur: {
+  explication: {
     fr: ['Explique ce concept pas à pas →', 'Qu\'est-ce que signifie... ?', 'Donne-moi un exemple du cours'],
     en: ['Explain this concept step by step →', 'What does this mean?', 'Give me an example from the course'],
   },
@@ -21,26 +21,26 @@ const MODE_SUGGESTIONS = {
     fr: ['Je ne comprends pas ce concept', 'Comment fonctionne... ?', 'Aide-moi à réfléchir sur...'],
     en: ['I don\'t understand this concept', 'How does this work?', 'Help me think through...'],
   },
-  coach: {
-    fr: ['J\'ai un examen dans 2 jours', 'Crée mon plan de révision', 'Motive-moi pour réviser'],
-    en: ['I have an exam in 2 days', 'Create my revision plan', 'Help me get motivated'],
+  entrainement: {
+    fr: ['Génère un exercice sur ce chapitre', 'Corrige ma réponse', 'Augmente la difficulté'],
+    en: ['Generate an exercise on this chapter', 'Correct my answer', 'Increase the difficulty'],
   },
-  verificateur: {
+  verification: {
     fr: ['Teste ma compréhension', 'Génère un quiz sur ce chapitre', 'Évalue ma réponse :'],
     en: ['Test my understanding', 'Generate a quiz on this chapter', 'Evaluate my answer:'],
   },
-  recall: {
+  revision: {
     fr: ['Lance les flashcards', 'Révise les concepts clés', 'Mode flashcard sur ce cours'],
     en: ['Start flashcards', 'Revise key concepts', 'Flashcard mode for this course'],
   },
 };
 
 const MODE_TITLES = {
-  tuteur:       { fr: 'Que souhaitez-vous apprendre ?',    en: 'What would you like to learn?' },
+  explication:  { fr: 'Que souhaitez-vous apprendre ?',    en: 'What would you like to learn?' },
   socratique:   { fr: 'Posez votre question.',              en: 'Ask your question.' },
-  coach:        { fr: 'Prêt à réviser ?',                  en: 'Ready to revise?' },
-  verificateur: { fr: 'Prêt à être testé ?',               en: 'Ready to be tested?' },
-  recall:       { fr: 'Mode Flashcards activé.',           en: 'Flashcard mode active.' },
+  entrainement: { fr: 'Prêt à vous entraîner ?',            en: 'Ready to practice?' },
+  verification: { fr: 'Prêt à être testé ?',               en: 'Ready to be tested?' },
+  revision:     { fr: 'Mode Flashcards activé.',           en: 'Flashcard mode active.' },
 };
 
 function newMsgId() {
@@ -93,7 +93,7 @@ export function ChatMvp() {
   const [reportStudent, setReportStudent] = useState('');
   const [reportCourse, setReportCourse] = useState('');
   const [enabledSources, setEnabledSources] = useState([]);
-  const [activeMode, setActiveMode] = useState('tuteur');
+  const [activeMode, setActiveMode] = useState('explication');
   const [docStates, setDocStates] = useState({});
   const [storageOpen, setStorageOpen] = useState(false);
   const [totalChunks, setTotalChunks] = useState(0);
@@ -333,6 +333,7 @@ export function ChatMvp() {
         setMessages((m) => patchLastAssistant(m, {
           content: assistantText,
           sources: messageSources.length ? messageSources : undefined,
+          mode: activeMode,
         }));
         setTotalMessages((prev) => prev + 2);
         setLastSaved(new Date().toISOString());
@@ -441,11 +442,11 @@ export function ChatMvp() {
   }
 
   const suggests = fr
-    ? MODE_SUGGESTIONS[activeMode]?.fr || MODE_SUGGESTIONS.tuteur.fr
-    : MODE_SUGGESTIONS[activeMode]?.en || MODE_SUGGESTIONS.tuteur.en;
+    ? MODE_SUGGESTIONS[activeMode]?.fr || MODE_SUGGESTIONS.explication.fr
+    : MODE_SUGGESTIONS[activeMode]?.en || MODE_SUGGESTIONS.explication.en;
   const emptyTitle = fr
-    ? MODE_TITLES[activeMode]?.fr || MODE_TITLES.tuteur.fr
-    : MODE_TITLES[activeMode]?.en || MODE_TITLES.tuteur.en;
+    ? MODE_TITLES[activeMode]?.fr || MODE_TITLES.explication.fr
+    : MODE_TITLES[activeMode]?.en || MODE_TITLES.explication.en;
 
   const activeSessionId = sessionId
     || (typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null);

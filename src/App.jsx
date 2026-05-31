@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { KapsulProvider, useKapsul, SidebarV1, SidebarV2, HeaderV1, KAPSUL_THEME } from './kapsul/shell.jsx';
+import { KapsulProvider, useKapsul, SidebarV1, SidebarV2, HeaderV1, KAPSUL_THEME, StudentDashboardScreen } from './kapsul/shell.jsx';
 import { AuthScreen } from './kapsul/screens-auth.jsx';
 import { HubScreen, ChatScreen } from './kapsul/screens-student.jsx';
 import {
@@ -87,6 +87,7 @@ function AppShell() {
   const Sidebar = isV2 ? SidebarV2 : SidebarV1;
   const screens = {
     hub: HubScreen,
+    dashboard: StudentDashboardScreen,
     chat: role === 'student' ? StudentLibrary : ChatScreen,
     studio: StudioScreen,
     pulse: PulseScreen,
@@ -115,7 +116,7 @@ function AppShell() {
         flex: 1, display: 'flex', flexDirection: 'column',
         minWidth: 0, minHeight: 0, position: 'relative',
       }}>
-        {!isV2 && screen !== 'chat' && screen !== 'pulse' && (
+        {!isV2 && screen !== 'chat' && screen !== 'pulse' && screen !== 'dashboard' && (
           <HeaderV1 title={headerTitleMap[screen] || ''} />
         )}
         <ScreenErrorBoundary key={`${version}-${role}-${screen}`}>

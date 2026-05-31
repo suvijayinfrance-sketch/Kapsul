@@ -3,53 +3,105 @@ import { KapsulIcons as Ic } from '../icons.jsx';
 
 const ACCEPT = '.pdf,.docx,.pptx,.txt';
 
+export const MODE_CONFIG = {
+  explication: {
+    label: 'EXPLICATION',
+    color: '#2563EB',
+    bg: '#EFF6FF',
+    desc: "Je t'explique pas à pas, avec des exemples adaptés à ton niveau",
+    icon: '📘',
+  },
+  socratique: {
+    label: 'SOCRATIQUE',
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+    desc: 'Je ne te donne pas la réponse, je te guide',
+    icon: '🤔',
+  },
+  entrainement: {
+    label: 'ENTRAÎNEMENT',
+    color: '#F97316',
+    bg: '#FFF7ED',
+    desc: 'Je génère des exercices avec correction et difficulté progressive',
+    icon: '🏋',
+  },
+  verification: {
+    label: 'VÉRIFICATION',
+    color: '#22C55E',
+    bg: '#F0FDF4',
+    desc: 'Mini test rapide, détection des lacunes et renvoi aux passages clés',
+    icon: '✓',
+  },
+  revision: {
+    label: 'RÉVISION',
+    color: '#6D28D9',
+    bg: '#F5F3FF',
+    desc: 'Flashcards et rappels espacés sur ce que tu as déjà compris',
+    icon: '🔁',
+  },
+};
+
+const MODE_ORDER = ['explication', 'socratique', 'entrainement', 'verification', 'revision'];
+
 function generateShadowPills(text, currentMode, fr) {
   if (!text || text.trim().length < 3) return [];
 
   const t = text.toLowerCase();
   const pills = [];
 
-  if (!t.includes('l1') && !t.includes('l2') && !t.includes('master') &&
-      !t.includes('licence') && !t.includes('débutant')) {
-    pills.push({ id: 'level-l1',     label: fr ? 'Niveau L1'     : 'Level L1',     type: 'level'   });
-    pills.push({ id: 'level-master', label: fr ? 'Niveau Master' : 'Master level', type: 'level'   });
+  if (!t.includes('[niveau l1]') && !t.includes('[niveau m1]') && !t.includes('[niveau m2]')) {
+    pills.push({ id: 'level-l1', label: fr ? 'Niveau L1' : 'Level L1', type: 'append' });
+    pills.push({ id: 'level-m1', label: fr ? 'Niveau M1' : 'Level M1', type: 'append' });
+    pills.push({ id: 'level-m2', label: fr ? 'Niveau M2' : 'Level M2', type: 'append' });
   }
 
-  if (t.includes('expli') || t.includes('résume') || t.includes('defin') ||
-      t.includes('explain') || t.includes('summar')) {
-    pills.push({ id: 'time-5',  label: fr ? 'En 5 minutes'  : 'In 5 minutes',  type: 'time' });
-    pills.push({ id: 'time-2',  label: fr ? 'En 2 minutes'  : 'In 2 minutes',  type: 'time' });
+  if (currentMode !== 'socratique') {
+    pills.push({
+      id: 'mode-socrate',
+      label: fr ? 'Mode Socratique' : 'Socratic mode',
+      type: 'mode',
+      targetMode: 'socratique',
+    });
+  }
+  if (currentMode !== 'explication') {
+    pills.push({
+      id: 'mode-explication',
+      label: fr ? 'Mode Explication' : 'Explanation mode',
+      type: 'mode',
+      targetMode: 'explication',
+    });
+  }
+  if (currentMode !== 'revision') {
+    pills.push({
+      id: 'mode-revision',
+      label: fr ? 'Mode Révision' : 'Revision mode',
+      type: 'mode',
+      targetMode: 'revision',
+    });
   }
 
-  if ((t.includes('exercice') || t.includes('quiz') || t.includes('test') ||
-       t.includes('pratique') || t.includes('practice')) && currentMode !== 'verificateur') {
-    pills.push({ id: 'mode-verif', label: fr ? 'Mode Vérificateur' : 'Checker mode', type: 'mode', targetMode: 'verificateur' });
-  }
-  if ((t.includes('révise') || t.includes('flashcard') || t.includes('recall') ||
-       t.includes('mémoris') || t.includes('memori')) && currentMode !== 'recall') {
-    pills.push({ id: 'mode-recall', label: fr ? 'Mode Recall' : 'Recall mode', type: 'mode', targetMode: 'recall' });
-  }
-  if ((t.includes('comprend') || t.includes('understand') || t.includes('confused') ||
-       t.includes('perdu') || t.includes('lost')) && currentMode !== 'socratique') {
-    pills.push({ id: 'mode-socrate', label: fr ? 'Mode Socratique' : 'Socratic mode', type: 'mode', targetMode: 'socratique' });
+  if (
+    t.includes('expliqu') || t.includes('expli') || t.includes('explain') ||
+    t.includes('résume') || t.includes('resume') || t.includes('summar')
+  ) {
+    pills.push({ id: 'time-2', label: fr ? 'En 2 minutes' : 'In 2 minutes', type: 'append' });
+    pills.push({ id: 'time-5', label: fr ? 'En 5 minutes' : 'In 5 minutes', type: 'append' });
+    pills.push({ id: 'time-resume', label: fr ? 'Résumé rapide' : 'Quick summary', type: 'append' });
   }
 
-  if (t.includes('expli') || t.includes('explain') || t.includes('comment') || t.includes('pourquoi')) {
-    pills.push({ id: 'detail-simple',  label: fr ? 'En termes simples'  : 'In simple terms',  type: 'detail' });
-    pills.push({ id: 'detail-exemple', label: fr ? 'Avec un exemple'    : 'With an example',  type: 'detail' });
-  }
-
-  return pills.slice(0, 4);
+  return pills;
 }
 
 export function ChatInputMvp({
   k, isV2, v, placeholder, onSend, onAddFiles, disabled, lang, attachDisabled,
   enabledSources = [], onSourceToggle,
-  activeMode = 'tuteur', onModeChange,
+  activeMode = 'explication', onModeChange,
 }) {
   const [inputValue, setInputValue] = useState('');
   const [shadowPills, setShadowPills] = useState([]);
+  const [appliedPillIds, setAppliedPillIds] = useState(new Set());
   const [selectedMode, setSelectedMode] = useState(activeMode);
+  const [hoveredMode, setHoveredMode] = useState(null);
   const fileRef = useRef(null);
   const fr = lang === 'fr';
 
@@ -62,58 +114,8 @@ export function ChatInputMvp({
     onModeChange?.(modeId);
   };
 
-  const LEARNING_MODES = [
-    {
-      id: 'tuteur',
-      label: 'Tuteur',
-      labelEn: 'Tutor',
-      icon: '📖',
-      desc: fr ? 'Explique pas à pas' : 'Step-by-step explanation',
-      color: '#2563EB',
-      bg: '#EFF6FF',
-      bgActive: '#2563EB',
-    },
-    {
-      id: 'socratique',
-      label: 'Socratique',
-      labelEn: 'Socratic',
-      icon: '🤔',
-      desc: fr ? 'Guide par des questions' : 'Guides with questions',
-      color: '#7C3AED',
-      bg: '#F5F3FF',
-      bgActive: '#7C3AED',
-    },
-    {
-      id: 'coach',
-      label: 'Coach',
-      labelEn: 'Coach',
-      icon: '🎯',
-      desc: fr ? 'Motive et structure' : 'Motivates and structures',
-      color: '#059669',
-      bg: '#ECFDF5',
-      bgActive: '#059669',
-    },
-    {
-      id: 'verificateur',
-      label: 'Vérificateur',
-      labelEn: 'Checker',
-      icon: '✅',
-      desc: fr ? 'Teste et évalue' : 'Tests and grades',
-      color: '#D97706',
-      bg: '#FFFBEB',
-      bgActive: '#D97706',
-    },
-    {
-      id: 'recall',
-      label: 'Recall',
-      labelEn: 'Recall',
-      icon: '🃏',
-      desc: fr ? 'Flashcards de révision' : 'Spaced repetition cards',
-      color: '#DC2626',
-      bg: '#FEF2F2',
-      bgActive: '#DC2626',
-    },
-  ];
+  const displayMode = hoveredMode || selectedMode;
+  const displayConfig = MODE_CONFIG[displayMode];
 
   const DATA_SOURCES = [
     { id: 'entreprises', label: 'Entreprises FR', emoji: '🏢', group: 'french', color: '#003F7D' },
@@ -124,14 +126,17 @@ export function ChatInputMvp({
   ];
 
   const handlePillClick = (pill) => {
+    if (appliedPillIds.has(pill.id)) return;
     if (pill.type === 'mode' && pill.targetMode) {
       selectMode(pill.targetMode);
-      setShadowPills((prev) => prev.filter((p) => p.id !== pill.id));
+      const tag = ` [${pill.label}]`;
+      setInputValue((prev) => (prev.trim() ? `${prev.trim()}${tag}` : tag.trim()));
+      setAppliedPillIds((prev) => new Set(prev).add(pill.id));
       return;
     }
     const tag = ` [${pill.label}]`;
-    setInputValue((prev) => prev + tag);
-    setShadowPills((prev) => prev.filter((p) => p.id !== pill.id));
+    setInputValue((prev) => (prev.trim() ? `${prev.trim()}${tag}` : tag.trim()));
+    setAppliedPillIds((prev) => new Set(prev).add(pill.id));
   };
 
   const send = () => {
@@ -140,7 +145,10 @@ export function ChatInputMvp({
     onSend(trimmed);
     setInputValue('');
     setShadowPills([]);
+    setAppliedPillIds(new Set());
   };
+
+  const pillsVisible = !disabled && shadowPills.length > 0;
 
   const onFilePick = (e) => {
     const picked = Array.from(e.target.files || []);
@@ -178,17 +186,20 @@ export function ChatInputMvp({
           zIndex: 2,
           touchAction: 'pan-x',
         }}>
-          {LEARNING_MODES.map((mode) => {
-            const isActive = selectedMode === mode.id;
+          {MODE_ORDER.map((modeId) => {
+            const mode = MODE_CONFIG[modeId];
+            const isActive = selectedMode === modeId;
             return (
               <button
-                key={mode.id}
+                key={modeId}
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  selectMode(mode.id);
+                  selectMode(modeId);
                 }}
+                onMouseEnter={() => setHoveredMode(modeId)}
+                onMouseLeave={() => setHoveredMode(null)}
                 title={mode.desc}
                 style={{
                   display: 'inline-flex',
@@ -200,11 +211,13 @@ export function ChatInputMvp({
                   fontWeight: isActive ? 700 : 500,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
-                  border: `1.5px solid ${isActive ? mode.color : k.border}`,
+                  border: isActive
+                    ? `1.5px solid ${mode.color}`
+                    : `1px solid ${isV2 ? k.border : '#E2E8F0'}`,
                   background: isActive
-                    ? mode.bgActive
-                    : (isV2 ? 'rgba(255,255,255,0.04)' : mode.bg),
-                  color: isActive ? '#FFFFFF' : (isV2 ? k.textMuted : mode.color),
+                    ? mode.bg
+                    : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
+                  color: isActive ? mode.color : (isV2 ? k.textMuted : '#64748B'),
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
@@ -213,11 +226,30 @@ export function ChatInputMvp({
                 }}
               >
                 <span style={{ fontSize: 13 }}>{mode.icon}</span>
-                {fr ? mode.label : mode.labelEn}
+                {mode.label}
               </button>
             );
           })}
         </div>
+
+        {/* Mode description */}
+        {displayConfig && (
+          <div
+            key={displayMode}
+            className="kapsul-mode-desc"
+            style={{
+              padding: '4px 16px 6px',
+              fontSize: 11,
+              color: displayConfig.color,
+              borderBottom: `1px solid ${k.border}`,
+              background: isV2 ? 'rgba(0,0,0,0.08)' : '#FAFAFA',
+              opacity: 1,
+              transition: 'opacity 0.2s ease',
+            }}
+          >
+            {displayConfig.icon} {displayConfig.desc}
+          </div>
+        )}
 
         {/* Data Source Tickers */}
         <div style={{
@@ -333,46 +365,6 @@ export function ChatInputMvp({
           )}
         </div>
 
-        {/* Shadow coaching pills */}
-        {shadowPills.length > 0 && (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 5,
-            padding: '6px 16px 2px',
-            background: isV2 ? 'rgba(37,99,235,0.05)' : '#F0F7FF',
-            borderBottom: `1px solid ${isV2 ? 'rgba(37,99,235,0.15)' : '#BFDBFE'}`,
-          }}>
-            <span style={{
-              fontSize: 10, color: isV2 ? '#60A5FA' : '#2563EB',
-              fontWeight: 600, alignSelf: 'center', marginRight: 2,
-            }}>
-              {fr ? '💡 Affiner :' : '💡 Refine:'}
-            </span>
-            {shadowPills.map((pill) => (
-              <button
-                key={pill.id}
-                type="button"
-                onClick={() => handlePillClick(pill)}
-                style={{
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  border: `1px solid ${isV2 ? 'rgba(37,99,235,0.4)' : '#BFDBFE'}`,
-                  background: isV2 ? 'rgba(37,99,235,0.12)' : '#EFF6FF',
-                  color: isV2 ? '#60A5FA' : '#2563EB',
-                  transition: 'all 0.1s',
-                }}
-              >
-                + {pill.label}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 12px' }}>
           <input
             ref={fileRef}
@@ -404,7 +396,12 @@ export function ChatInputMvp({
             onChange={(e) => {
               const val = e.target.value;
               setInputValue(val);
-              setShadowPills(generateShadowPills(val, selectedMode, fr));
+              if (!val.trim()) {
+                setShadowPills([]);
+                setAppliedPillIds(new Set());
+              } else {
+                setShadowPills(generateShadowPills(val, selectedMode, fr));
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -430,6 +427,57 @@ export function ChatInputMvp({
             <Ic.Send size={17} sw={1.8} />
           </button>
         </div>
+
+        {pillsVisible && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 5,
+            padding: '4px 16px 10px',
+            borderTop: `1px solid ${k.border}`,
+          }}>
+            <span style={{
+              fontSize: 10,
+              color: isV2 ? k.textMuted : '#64748B',
+              fontWeight: 600,
+              alignSelf: 'center',
+              marginRight: 2,
+            }}>
+              {fr ? '💡 Affiner :' : '💡 Refine:'}
+            </span>
+            {shadowPills.map((pill) => {
+              const pillActive = appliedPillIds.has(pill.id)
+                || inputValue.includes(`[${pill.label}]`);
+              return (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => handlePillClick(pill)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: pillActive ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                    border: pillActive
+                      ? (isV2 ? '1px solid rgba(37,99,235,0.5)' : '1px solid #BFDBFE')
+                      : (isV2 ? `1px solid ${k.border}` : '1px solid #E2E8F0'),
+                    background: pillActive
+                      ? (isV2 ? 'rgba(37,99,235,0.2)' : '#EFF6FF')
+                      : (isV2 ? 'rgba(255,255,255,0.04)' : '#F8FAFC'),
+                    color: pillActive
+                      ? (isV2 ? '#60A5FA' : '#2563EB')
+                      : (isV2 ? k.textMuted : '#64748B'),
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  {pillActive ? pill.label : `+ ${pill.label}`}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

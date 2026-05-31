@@ -81,9 +81,38 @@
   100% { transform: scale(1);   opacity: 1; }
 }
 
+@keyframes kapsul-celebrate {
+  0%   { transform: scale(1);    }
+  30%  { transform: scale(1.08); }
+  60%  { transform: scale(0.97); }
+  100% { transform: scale(1);    }
+}
+
 @keyframes kapsul-fadeup {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes kapsul-mode-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+
+@keyframes kapsul-fill {
+  from { width: 0%; }
+  to   { width: var(--target-width); }
+}
+
+.kapsul-mastered {
+  animation: kapsul-celebrate 0.4s ease;
+}
+
+.kapsul-assistant-msg {
+  animation: kapsul-fadeup 0.25s ease;
+}
+
+.kapsul-mode-desc {
+  animation: kapsul-mode-in 0.2s ease;
 }
 
 .kapsul-mvp-cursor {

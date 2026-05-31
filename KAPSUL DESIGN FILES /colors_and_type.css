@@ -1,0 +1,331 @@
+/* =========================================================================
+   Kapsul / Pulse UI — Colors & Type Tokens
+   --------------------------------------------------------------------------
+   Source: extracted/index.css, extracted/components/* (Tailwind classes)
+   The product uses Tailwind utility classes (slate-50…900, blue-500…700,
+   orange-500/600, emerald, cyan) plus a signature linear gradient that runs
+   blue-600 → cyan-500 → orange-500 across logos, hero text and CTAs.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  /* ---------- Palette: Le Gradient Énergétique ---------------------------- */
+
+  /* Royal blue / Indigo — base of trust & technology */
+  --kp-blue-50:  #eff6ff;
+  --kp-blue-100: #dbeafe;
+  --kp-blue-200: #bfdbfe;
+  --kp-blue-300: #93c5fd;
+  --kp-blue-400: #60a5fa;
+  --kp-blue-500: #3b82f6;
+  --kp-blue-600: #2563eb;  /* Primary brand blue (buttons, active links) */
+  --kp-blue-700: #1d4ed8;
+  --kp-blue-800: #1e40af;
+  --kp-blue-900: #1e3a8a;
+
+  /* Cyan / Turquoise — luminosity, "high-tech" middle of the gradient */
+  --kp-cyan-100: #cffafe;
+  --kp-cyan-300: #67e8f9;
+  --kp-cyan-400: #22d3ee;
+  --kp-cyan-500: #06b6d4;  /* Mid-stop of signature gradient */
+  --kp-cyan-600: #0891b2;
+
+  /* Solar orange / Coral — accent (logo endpoints, hot CTAs) */
+  --kp-orange-50:  #fff7ed;
+  --kp-orange-100: #ffedd5;
+  --kp-orange-200: #fed7aa;
+  --kp-orange-400: #fb923c;
+  --kp-orange-500: #f97316;  /* Logo endpoint */
+  --kp-orange-600: #ea580c;
+  --kp-coral-500:  #ff7e5f;  /* Used in landing background gradient */
+
+  /* Neutrals — slate spine of the entire UI */
+  --kp-white:    #ffffff;
+  --kp-off-white:#fefefe;   /* Main app canvas */
+  --kp-sidebar:  #f8faff;   /* Sidebar background, cool tint */
+  --kp-slate-50: #f8fafc;
+  --kp-slate-100:#f1f5f9;
+  --kp-slate-200:#e2e8f0;
+  --kp-slate-300:#cbd5e1;
+  --kp-slate-400:#94a3b8;
+  --kp-slate-500:#64748b;
+  --kp-slate-600:#475569;
+  --kp-slate-700:#334155;
+  --kp-slate-800:#1e293b;
+  --kp-slate-900:#0f172a;
+  --kp-ink:      #0b1120;   /* Deepest ink, used in landing gradient */
+
+  /* Semantic — used sparingly */
+  --kp-success-50:  #ecfdf5;
+  --kp-success-500: #10b981;
+  --kp-success-600: #059669;
+  --kp-warn-50:     #fff7ed;
+  --kp-warn-500:    #f97316;
+  --kp-warn-600:    #ea580c;
+  --kp-danger-50:   #fef2f2;
+  --kp-danger-500:  #ef4444;
+  --kp-danger-600:  #dc2626;
+  --kp-info-50:     #eff6ff;
+  --kp-info-600:    #2563eb;
+
+  /* Per-tool accent (Studio Créatif sidebar items) — keep MUTED */
+  --kp-tool-canva:      #a855f7;  /* purple-500 */
+  --kp-tool-powerpoint: #ea580c;  /* orange-600 */
+  --kp-tool-excel:      #16a34a;  /* green-600 */
+  --kp-tool-drive:      #3b82f6;  /* blue-500 */
+  --kp-tool-gamma:      #f59e0b;  /* amber-500 */
+
+  /* ---------- Foreground / Background semantic vars ---------------------- */
+  --kp-fg-1: var(--kp-slate-900);   /* Headlines, key numbers */
+  --kp-fg-2: var(--kp-slate-800);   /* Body */
+  --kp-fg-3: var(--kp-slate-500);   /* Muted body, captions */
+  --kp-fg-4: var(--kp-slate-400);   /* Labels, placeholders */
+  --kp-fg-disabled: var(--kp-slate-300);
+  --kp-fg-on-brand: #ffffff;
+
+  --kp-bg-app: var(--kp-off-white);
+  --kp-bg-surface: #ffffff;
+  --kp-bg-sunken: var(--kp-slate-50);
+  --kp-bg-sidebar: var(--kp-sidebar);
+
+  --kp-border-subtle: var(--kp-slate-100);
+  --kp-border-default: var(--kp-slate-200);
+  --kp-border-strong: var(--kp-slate-300);
+
+  /* ---------- Signature Gradient ----------------------------------------- */
+  --kp-gradient-energy: linear-gradient(
+    90deg,
+    var(--kp-blue-600) 0%,
+    var(--kp-cyan-500) 50%,
+    var(--kp-orange-500) 100%
+  );
+  --kp-gradient-energy-soft: linear-gradient(
+    90deg,
+    var(--kp-blue-200) 0%,
+    var(--kp-cyan-300) 50%,
+    var(--kp-orange-200) 100%
+  );
+  /* Landing page atmospheric backdrop (top→bottom) */
+  --kp-gradient-landing: linear-gradient(
+    to top,
+    var(--kp-ink) 0%,
+    var(--kp-slate-800) 60%,
+    var(--kp-coral-500) 100%
+  );
+
+  /* ---------- Radii ------------------------------------------------------ */
+  --kp-radius-xs: 4px;     /* tiny chips */
+  --kp-radius-sm: 6px;     /* default control corner */
+  --kp-radius-md: 8px;     /* nav items, small buttons */
+  --kp-radius-lg: 12px;    /* buttons, inputs */
+  --kp-radius-xl: 16px;    /* cards */
+  --kp-radius-2xl: 20px;   /* feature cards, modal */
+  --kp-radius-3xl: 24px;   /* drag-drop zones */
+  --kp-radius-pill: 9999px;
+
+  /* ---------- Shadows ---------------------------------------------------- */
+  --kp-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --kp-shadow-md: 0 4px 8px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --kp-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.04);          /* floating chat input */
+  --kp-shadow-focus-blue: 0 8px 30px rgba(59, 130, 246, 0.10);
+  --kp-shadow-cta: 0 8px 16px -4px rgba(37, 99, 235, 0.20);  /* blue-600/20 */
+  --kp-shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);    /* modals */
+
+  /* ---------- Spacing scale (Tailwind defaults; documented) -------------- */
+  --kp-space-1: 4px;
+  --kp-space-2: 8px;
+  --kp-space-3: 12px;
+  --kp-space-4: 16px;
+  --kp-space-5: 20px;
+  --kp-space-6: 24px;
+  --kp-space-8: 32px;
+  --kp-space-10: 40px;
+  --kp-space-12: 48px;
+  --kp-space-16: 64px;
+
+  /* ---------- Typography: Inter as the single voice ---------------------- */
+  --kp-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+                  Roboto, "Helvetica Neue", Arial, sans-serif;
+  --kp-font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Monaco,
+                  Consolas, "Courier New", monospace;
+
+  /* Font weights actively used in the codebase */
+  --kp-weight-light: 300;
+  --kp-weight-regular: 400;
+  --kp-weight-medium: 500;
+  --kp-weight-semibold: 600;
+  --kp-weight-bold: 700;
+  --kp-weight-extrabold: 800;
+  --kp-weight-black: 900;   /* "Kapsul" wordmark in sidebar */
+
+  /* Type scale */
+  --kp-text-xxs: 10px;  /* eyebrows, status pills */
+  --kp-text-xs:  11px;  /* sidebar section headers (uppercase tracking) */
+  --kp-text-sm:  14px;  /* body in dense surfaces */
+  --kp-text-md:  16px;  /* body */
+  --kp-text-lg:  18px;  /* prominent body */
+  --kp-text-xl:  20px;  /* H3 / view titles */
+  --kp-text-2xl: 24px;  /* H2 / dashboard titles */
+  --kp-text-3xl: 30px;  /* H1 hub, settings */
+  --kp-text-4xl: 36px;  /* Login card title */
+  --kp-text-6xl: 60px;  /* Landing hero */
+
+  --kp-leading-tight: 1.15;
+  --kp-leading-snug: 1.3;
+  --kp-leading-normal: 1.5;
+  --kp-leading-relaxed: 1.7;
+
+  --kp-tracking-tight: -0.02em;
+  --kp-tracking-tighter: -0.03em;  /* Used on the Kapsul wordmark */
+  --kp-tracking-wide: 0.04em;
+  --kp-tracking-wider: 0.08em;     /* Uppercase labels, "SMART", section caps */
+}
+
+/* ===========================================================================
+   Semantic type roles
+   --------------------------------------------------------------------------
+   Use these classes (or copy their declarations) instead of restyling from
+   scratch. They mirror what's actually used across the product.
+   =========================================================================== */
+
+html, body {
+  font-family: var(--kp-font-sans);
+  color: var(--kp-fg-2);
+  background: var(--kp-bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Wordmark — the literal "Kapsul" in the sidebar */
+.kp-wordmark {
+  font-family: var(--kp-font-sans);
+  font-weight: var(--kp-weight-black);
+  font-size: var(--kp-text-3xl);
+  letter-spacing: var(--kp-tracking-tighter);
+  line-height: 1;
+  color: var(--kp-fg-1);
+}
+
+/* Hero — landing page main headline */
+.kp-hero {
+  font-family: var(--kp-font-sans);
+  font-weight: var(--kp-weight-extrabold);
+  font-size: clamp(34px, 5vw, var(--kp-text-6xl));
+  line-height: var(--kp-leading-tight);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-white);
+}
+
+/* Gradient text — used on header titles and hero spans */
+.kp-text-gradient {
+  background: var(--kp-gradient-energy);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Page H1 (e.g. "Bonjour, Student", "Paramètres") */
+.kp-h1 {
+  font-weight: var(--kp-weight-bold);
+  font-size: var(--kp-text-3xl);
+  line-height: var(--kp-leading-tight);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-fg-1);
+}
+
+/* H2 — section / dashboard titles */
+.kp-h2 {
+  font-weight: var(--kp-weight-bold);
+  font-size: var(--kp-text-2xl);
+  line-height: var(--kp-leading-snug);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-fg-1);
+}
+
+/* H3 — card/section header */
+.kp-h3 {
+  font-weight: var(--kp-weight-bold);
+  font-size: var(--kp-text-lg);
+  line-height: var(--kp-leading-snug);
+  color: var(--kp-fg-2);
+}
+
+/* Header title (in app header) — gradient applied */
+.kp-app-title {
+  font-weight: var(--kp-weight-bold);
+  font-size: var(--kp-text-xl);
+  letter-spacing: var(--kp-tracking-tight);
+  background: var(--kp-gradient-energy);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Body */
+.kp-body {
+  font-size: var(--kp-text-md);
+  line-height: var(--kp-leading-relaxed);
+  color: var(--kp-fg-2);
+}
+.kp-body-sm {
+  font-size: var(--kp-text-sm);
+  line-height: var(--kp-leading-normal);
+  color: var(--kp-fg-2);
+}
+
+/* Muted secondary text (subtitles, descriptions) */
+.kp-muted {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-3);
+  line-height: var(--kp-leading-normal);
+}
+
+/* Light prompt text — chat empty-state greeting */
+.kp-prompt {
+  font-weight: var(--kp-weight-light);
+  font-size: var(--kp-text-lg);
+  color: var(--kp-fg-3);
+  line-height: var(--kp-leading-relaxed);
+}
+
+/* Eyebrow / section caps — uppercase tracked label */
+.kp-eyebrow {
+  font-size: var(--kp-text-xs);
+  font-weight: var(--kp-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--kp-tracking-wider);
+  color: var(--kp-fg-4);
+}
+
+/* Status pill text */
+.kp-pill-label {
+  font-size: var(--kp-text-xxs);
+  font-weight: var(--kp-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--kp-tracking-wider);
+}
+
+/* Mono — used in code previews, metric callouts */
+.kp-mono {
+  font-family: var(--kp-font-mono);
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-3);
+}
+
+/* KPI / Big stat */
+.kp-stat {
+  font-weight: var(--kp-weight-black);
+  font-size: var(--kp-text-4xl);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-fg-1);
+  line-height: 1;
+}
+
+/* Notion-like custom scrollbar (kept from original) */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--kp-slate-300); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--kp-slate-400); }

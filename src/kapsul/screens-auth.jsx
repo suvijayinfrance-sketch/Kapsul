@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { KapsulIcons as Icons2 } from './icons.jsx';
 import { KAPSUL_THEME, useKapsul } from './shell.jsx';
+import { LandingScreen } from './LandingScreen.jsx';
 
 // ═══════════════════════════════════════════════════════════
 // Shared primitives
@@ -62,9 +62,15 @@ export function Toggle({ on, onChange, v }) {
 // AUTH (V1 + V2 in one component, branched by version)
 // ═══════════════════════════════════════════════════════════
 export function AuthScreen() {
-  const { version, lang, setLang, t, role, setRole, setScreen } = useKapsul();
-  const k = KAPSUL_THEME[version];
-  const isV2 = version === 'v2';
+  const { version } = useKapsul();
+  if (version === 'v1') return <LandingScreen />;
+  return <AuthScreenV2 />;
+}
+
+function AuthScreenV2() {
+  const { lang, setLang, t, role, setRole, setScreen } = useKapsul();
+  const k = KAPSUL_THEME.v2;
+  const isV2 = true;
 
   const roleTitle = { student: t.studentSpace, professor: t.professorSpace, admin: t.adminSpace }[role];
   const roleDesc = { student: t.studentDesc, professor: t.professorDesc, admin: t.adminDesc }[role];
@@ -109,7 +115,7 @@ export function AuthScreen() {
 
         {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 2 }}>
-          <Icons2.K size={isV2 ? 44 : 36} v={version} />
+          <Icons2.K size={44} v="v2" />
           <div style={{
             fontSize: isV2 ? 14 : 22, fontWeight: isV2 ? 600 : 700,
             letterSpacing: isV2 ? '0.22em' : -0.3,
@@ -177,7 +183,7 @@ export function AuthScreen() {
       }}>
         {/* Lang toggle (top right) */}
         <div style={{ position: 'absolute', top: 24, right: 32 }}>
-          <LangToggle v={version} lang={lang} setLang={setLang} />
+          <LangToggle v="v2" lang={lang} setLang={setLang} />
         </div>
 
         <div style={{

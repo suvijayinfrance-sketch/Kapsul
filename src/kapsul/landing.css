@@ -1,0 +1,33 @@
+@keyframes kp-drift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, -30px) scale(1.08); }
+}
+
+@keyframes kp-drift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 40px) scale(1.1); }
+}
+
+@keyframes kp-drift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, 30px) scale(0.92); }
+}
+
+.kp-bloom1 { animation: kp-drift1 18s ease-in-out infinite; }
+.kp-bloom2 { animation: kp-drift2 22s ease-in-out infinite; }
+.kp-bloom3 { animation: kp-drift3 26s ease-in-out infinite; }
+
+.kp-plexus circle { transition: r 600ms; }
+
+@keyframes kp-pulse-node {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+.kp-plexus .kp-node { animation: kp-pulse-node 4s ease-in-out infinite; }
+
+.kp-landing {
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

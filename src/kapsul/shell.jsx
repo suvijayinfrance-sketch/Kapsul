@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { KapsulIcons as Icons } from './icons.jsx';
 import { KAPSUL_I18N as T } from './i18n.js';
+import { StudentDashboard } from './student/StudentDashboard.jsx';
 
 const KapsulCtx = createContext(null);
 export function useKapsul() {
@@ -35,8 +36,8 @@ export const KAPSUL_THEME = {
     accent2: '#06B6D4',
     sidebarBg: '#F8FAFC', sidebarActive: '#EFF6FF',
     radius: { card: 8, input: 6, modal: 12, badge: 999 },
-    fontUI: '"Inter", system-ui, sans-serif',
-    fontDisplay: '"Inter", system-ui, sans-serif',
+    fontUI: '"DM Sans", system-ui, sans-serif',
+    fontDisplay: '"DM Sans", system-ui, sans-serif',
     fontMono: '"JetBrains Mono", ui-monospace, monospace',
   },
   v2: {
@@ -59,15 +60,13 @@ export const KAPSUL_NAV = {
   student: [
     { label: 'learning', items: [
       { id: 'hub', t: 'kapsulHub', icon: 'Grid' },
+      { id: 'dashboard', label: 'Mon Tableau de Bord', icon: 'Pulse' },
       { id: 'chat', t: 'aiChat', sub: 'aiChatSub', icon: 'Chat' },
-      { id: 'todo', t: 'todo', sub: 'todoSub', icon: 'Check' },
-      { id: 'collab', t: 'collab', icon: 'Users' },
     ]},
     { label: 'creativeStudio', items: [
-      { id: 'canva', t: 'canva', icon: 'Canva' },
+      { id: 'word', t: 'msWord', icon: 'Word' },
       { id: 'ppt', t: 'powerpoint', icon: 'Slides' },
       { id: 'excel', t: 'excel', icon: 'Sheet' },
-      { id: 'drive', t: 'drive', icon: 'Cloud' },
       { id: 'gamma', t: 'gamma', icon: 'Wand' },
     ]},
   ],
@@ -152,7 +151,7 @@ export function SidebarV1() {
                 >
                   {Icon && <Icon size={17} sw={1.7} />}
                   <span style={{ flex: 1, lineHeight: 1.2 }}>
-                    {t[item.t]}
+                    {item.label || t[item.t]}
                     {item.sub && <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: k.textFaint, marginTop: 1 }}>{t[item.sub]}</span>}
                   </span>
                 </button>
@@ -247,7 +246,7 @@ export function SidebarV2() {
               const active = screen === item.id;
               return (
                 <button key={item.id} onClick={() => setScreen(item.id)}
-                  title={!hover ? t[item.t] : undefined}
+                  title={!hover ? (item.label || t[item.t]) : undefined}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                     padding: '10px 12px',
@@ -267,7 +266,7 @@ export function SidebarV2() {
                   }}/>}
                   {Icon && <Icon size={18} sw={1.6}/>}
                   <span style={{ opacity: hover ? 1 : 0, transition: 'opacity 0.18s' }}>
-                    {t[item.t]}
+                    {item.label || t[item.t]}
                   </span>
                 </button>
               );
@@ -363,3 +362,24 @@ export function HeaderV1({ title, subtitle, right }) {
     </header>
   );
 };
+
+// ─────────────── Student Dashboard screen ───────────────
+export function StudentDashboardScreen() {
+  const { version, setScreen } = useKapsul();
+  const k = KAPSUL_THEME[version];
+  const isV2 = version === 'v2';
+
+  const sessionId =
+    sessionStorage.getItem('kapsul_library_session') ||
+    sessionStorage.getItem('kapsul_chat_session') ||
+    '';
+
+  return (
+    <StudentDashboard
+      sessionId={sessionId}
+      onStartChat={() => setScreen('chat')}
+      k={k}
+      isV2={isV2}
+    />
+  );
+}

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Kapsul · Professor UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>html,body,#root{height:100%;margin:0}body{font-family:var(--kp-font-sans);background:#fefefe;color:#1e293b}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const KMark = ({ size = 32 }) => (<div style={{width:size,height:size,borderRadius:size*0.3,background:'linear-gradient(90deg,#2563eb 0%,#06b6d4 50%,#f97316 100%)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:900,fontSize:size*0.55,letterSpacing:'-0.02em',boxShadow:'0 4px 12px rgba(37,99,235,0.25)',flexShrink:0}}>K</div>);
+const Icon = ({name,size=18,color}) => <i data-lucide={name} style={{width:size,height:size,color,strokeWidth:2}}/>;
+const Pill = ({children,tone='slate',dot=false}) => { const t={slate:{bg:'#f1f5f9',fg:'#334155',d:'#94a3b8'},blue:{bg:'#eff6ff',fg:'#2563eb',d:'#3b82f6'},green:{bg:'#ecfdf5',fg:'#059669',d:'#10b981'},orange:{bg:'#fff7ed',fg:'#ea580c',d:'#f97316'},purple:{bg:'#faf5ff',fg:'#9333ea',d:'#a855f7'}}[tone]; return <span style={{display:'inline-flex',alignItems:'center',gap:6,background:t.bg,color:t.fg,padding:'4px 10px',borderRadius:9999,fontSize:11,fontWeight:700,letterSpacing:'0.04em'}}>{dot && <span style={{width:6,height:6,borderRadius:'50%',background:t.d}}/>}{children}</span>; };
+const Card = ({children,style={}}) => <div style={{background:'#fff',border:'1px solid #f1f5f9',borderRadius:16,padding:24,boxShadow:'0 1px 2px rgba(15,23,42,0.04),0 1px 3px rgba(15,23,42,0.06)',...style}}>{children}</div>;
+const Btn = ({children,variant='primary',icon,onClick}) => { const v={primary:{bg:'#2563eb',fg:'#fff',sh:'0 8px 16px -4px rgba(37,99,235,0.3)'},secondary:{bg:'#fff',fg:'#334155',sh:'none',bd:'1px solid #e2e8f0'},accent:{bg:'#f97316',fg:'#fff',sh:'0 4px 12px -2px rgba(249,115,22,0.3)'}}[variant]; return <button onClick={onClick} style={{display:'inline-flex',alignItems:'center',gap:8,background:v.bg,color:v.fg,border:v.bd||'1px solid transparent',padding:'10px 18px',borderRadius:12,fontSize:14,fontWeight:600,fontFamily:'inherit',cursor:'pointer',boxShadow:v.sh}}>{icon && <Icon name={icon} size={16}/>}{children}</button>; };
+
+const Sidebar = ({active,onNav}) => (
+  <aside style={{width:240,background:'#f8faff',borderRight:'1px solid rgba(226,232,240,0.6)',display:'flex',flexDirection:'column',padding:'20px 12px',flexShrink:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'4px 8px 18px'}}><KMark size={36}/><span style={{fontWeight:900,fontSize:24,letterSpacing:'-0.03em'}}>Kapsul</span><Pill tone="purple">PROF</Pill></div>
+    {[
+      {id:'studio',i:'sparkles',l:'Studio de cours'},
+      {id:'classes',i:'graduation-cap',l:'Mes classes'},
+      {id:'grader',i:'check-square',l:'Auto-Grader'},
+      {id:'translator',i:'languages',l:'Traducteur'},
+      {id:'radar',i:'radar',l:'Radar de classe'},
+    ].map(it => { const a=active===it.id; return <div key={it.id} onClick={()=>onNav(it.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:8,cursor:'pointer',background:a?'#fff':'transparent',boxShadow:a?'0 1px 2px rgba(15,23,42,0.04)':'none',border:`1px solid ${a?'#f1f5f9':'transparent'}`,color:a?'#2563eb':'#64748b',fontWeight:a?600:500,fontSize:14,marginBottom:2}}><Icon name={it.i} size={18} color={a?'#2563eb':'#64748b'}/>{it.l}</div>; })}
+    <div style={{marginTop:'auto',padding:'8px 10px',borderRadius:8,background:'#ecfdf5',color:'#059669',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:8}}><span style={{width:6,height:6,borderRadius:'50%',background:'#10b981'}}/>Moodle synced · 12:42</div>
+  </aside>
+);
+
+const Studio = () => (
+  <div style={{flex:1,display:'flex',minHeight:0}}>
+    <div style={{flex:1,display:'flex',flexDirection:'column',borderRight:'1px solid #f1f5f9'}}>
+      <div style={{padding:24,overflow:'auto',flex:1}}>
+        <Pill tone="blue" dot>STUDIO IA</Pill>
+        <h2 style={{margin:'12px 0 6px',fontWeight:700,fontSize:22,letterSpacing:'-0.01em'}}>Préparer le cours du 18 mars</h2>
+        <p style={{margin:0,color:'#64748b',fontSize:14,marginBottom:18}}>Sciences cognitives · L3 · 14 étudiants inscrits</p>
+        {[
+          {r:'prof',t:"Génère un QCM de 8 questions sur la charge cognitive, niveau L3."},
+          {r:'ai',rag:true,t:"Voici 8 questions calibrées sur les concepts clés (Sweller 1988, types de charge, Miller 7±2). J'ai poussé un brouillon dans l'éditeur — ajuste librement avant de l'envoyer sur Moodle."},
+        ].map((m,i)=>(
+          <div key={i} style={{display:'flex',gap:10,marginBottom:14,flexDirection:m.r==='prof'?'row-reverse':'row'}}>
+            {m.r==='ai'?<KMark size={28}/>:<div style={{width:28,height:28,borderRadius:'50%',background:'#a855f7',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11}}>JL</div>}
+            <div style={{maxWidth:'78%'}}>
+              {m.rag && <div style={{marginBottom:6}}><Pill tone="green" dot>RAG · syllabus + 4 sources</Pill></div>}
+              <div style={{background:m.r==='prof'?'#f1f5f9':'#fff',border:m.r==='ai'?'1px solid #f1f5f9':'none',borderRadius:18,padding:'12px 16px',fontSize:14,lineHeight:1.6}}>{m.t}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{padding:20,borderTop:'1px solid #f1f5f9'}}>
+        <div style={{background:'#fff',border:'1px solid #f1f5f9',borderRadius:20,padding:'12px 16px',boxShadow:'0 8px 30px rgba(0,0,0,0.04)'}}>
+          <div style={{fontSize:14,color:'#94a3b8'}}>Demande à Kapsul de générer, traduire, ou résumer…</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}><div style={{display:'flex',gap:6}}><Pill tone="blue">SMART</Pill><Pill tone="green" dot>RAG</Pill></div><div style={{width:30,height:30,borderRadius:'50%',background:'#2563eb',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="arrow-up" size={14} color="#fff"/></div></div>
+        </div>
+      </div>
+    </div>
+    <div style={{width:'50%',display:'flex',flexDirection:'column'}}>
+      <div style={{height:48,padding:'0 20px',display:'flex',alignItems:'center',gap:10,borderBottom:'1px solid #f1f5f9'}}>
+        <Icon name="check-square" size={16} color="#2563eb"/><span style={{fontWeight:700,fontSize:14}}>QCM · Charge cognitive</span><div style={{flex:1}}/><Pill tone="green" dot>Auto-saved</Pill><Btn variant="accent" icon="upload">Pousser sur Moodle</Btn>
+      </div>
+      <div style={{flex:1,overflow:'auto',padding:'24px 32px',background:'#fff'}}>
+        {[
+          "Selon Sweller, la charge cognitive intrinsèque dépend principalement…",
+          "Combien d'éléments la mémoire de travail peut-elle traiter simultanément, selon Miller (1956) ?",
+          "Quel type de charge l'enseignant peut-il directement réduire par la conception pédagogique ?",
+        ].map((q,i)=>(
+          <div key={i} style={{padding:'14px 0',borderBottom:'1px solid #f1f5f9'}}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}><span style={{fontFamily:'ui-monospace,monospace',color:'#94a3b8',fontSize:12,fontWeight:600,width:24}}>0{i+1}</span><div style={{fontSize:14,fontWeight:600,color:'#0f172a',flex:1}}>{q}</div></div>
+            <div style={{paddingLeft:34,display:'flex',flexDirection:'column',gap:6}}>
+              {['intrinsèque','extrinsèque','essentielle','germane'].map((opt,j)=>(<label key={j} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'#475569'}}><input type="radio" name={'q'+i} defaultChecked={i===0&&j===0}/>{opt}</label>))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const Radar = () => (
+  <div style={{flex:1,overflow:'auto',padding:32,background:'radial-gradient(#e5e7eb 1px, transparent 1px) 0 0/20px 20px, #fefefe'}}>
+    <div style={{maxWidth:1100,margin:'0 auto'}}>
+      <h1 style={{margin:'0 0 4px',fontWeight:800,fontSize:28,letterSpacing:'-0.02em'}}>Radar de classe</h1>
+      <p style={{margin:'0 0 24px',color:'#64748b'}}>Sciences cognitives · L3 · 14 étudiants — données 7 derniers jours</p>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        <Card>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}><h3 style={{margin:0,fontSize:16,fontWeight:700}}>Compétences couvertes</h3><Pill tone="blue" dot>RNCP auto-mappé</Pill></div>
+          <svg viewBox="0 0 320 280" style={{width:'100%',height:'auto'}}>
+            {[120,90,60,30].map((r,i)=><polygon key={i} points={Array.from({length:6}).map((_,j)=>{const a=Math.PI*2*j/6 - Math.PI/2;return `${160+Math.cos(a)*r},${140+Math.sin(a)*r}`}).join(' ')} fill="none" stroke="#e2e8f0" strokeWidth="1"/>)}
+            <polygon points={[100,80,110,75,90,95].map((v,i)=>{const a=Math.PI*2*i/6 - Math.PI/2;return `${160+Math.cos(a)*v},${140+Math.sin(a)*v}`}).join(' ')} fill="rgba(37,99,235,0.15)" stroke="#2563eb" strokeWidth="2"/>
+            {['Théorie','Méthodo.','Lecture','Synthèse','Critique','Oral'].map((l,i)=>{const a=Math.PI*2*i/6-Math.PI/2;return <text key={i} x={160+Math.cos(a)*140} y={140+Math.sin(a)*140} fontSize="11" fill="#475569" fontWeight="600" textAnchor="middle" dominantBaseline="middle" fontFamily="Inter">{l}</text>})}
+          </svg>
+        </Card>
+        <Card>
+          <h3 style={{margin:'0 0 12px',fontSize:16,fontWeight:700}}>Questions fréquentes (heatmap)</h3>
+          <div style={{display:'grid',gridTemplateColumns:'120px repeat(7,1fr)',gap:4,fontSize:11}}>
+            <div></div>{['L','M','M','J','V','S','D'].map(d=><div key={d} style={{textAlign:'center',color:'#94a3b8',fontWeight:600}}>{d}</div>)}
+            {['Charge cognitive','Mémoire travail','Statistiques','Méthodologie','Biais cognitif'].map((topic,r)=>(<React.Fragment key={r}>
+              <div style={{color:'#475569',fontWeight:500,paddingRight:8,textAlign:'right',display:'flex',alignItems:'center',justifyContent:'flex-end'}}>{topic}</div>
+              {Array.from({length:7}).map((_,c)=>{const v=(r*3+c*2)%6;const op=v/6;return <div key={c} style={{aspectRatio:'1',borderRadius:4,background:`rgba(37,99,235,${0.08+op*0.7})`,border:'1px solid rgba(255,255,255,0.5)'}}/>;})}
+            </React.Fragment>))}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'#94a3b8',marginTop:14}}>moins<div style={{width:14,height:14,borderRadius:3,background:'rgba(37,99,235,0.08)'}}/><div style={{width:14,height:14,borderRadius:3,background:'rgba(37,99,235,0.3)'}}/><div style={{width:14,height:14,borderRadius:3,background:'rgba(37,99,235,0.6)'}}/><div style={{width:14,height:14,borderRadius:3,background:'rgba(37,99,235,0.85)'}}/>plus</div>
+        </Card>
+        <Card style={{gridColumn:'span 2'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}><h3 style={{margin:0,fontSize:16,fontWeight:700}}>Risque de décrochage</h3><Pill tone="orange" dot>3 alertes</Pill></div>
+          {[
+            {n:'Marie L.',r:78,m:'Aucune connexion · 6j'},
+            {n:'Thomas R.',r:52,m:'2 rendus manqués'},
+            {n:'Inès D.',r:34,m:'Baisse d\'engagement'},
+          ].map((s,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0',borderTop:i?'1px solid #f1f5f9':'none'}}>
+              <div style={{width:32,height:32,borderRadius:'50%',background:'#cbd5e1',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11}}>{s.n.split(' ').map(p=>p[0]).join('')}</div>
+              <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600}}>{s.n}</div><div style={{fontSize:12,color:'#64748b'}}>{s.m}</div></div>
+              <div style={{flex:2,height:6,borderRadius:3,background:'#f1f5f9',overflow:'hidden'}}><div style={{width:`${s.r}%`,height:'100%',background:s.r>70?'#ef4444':s.r>50?'#f97316':'#f59e0b',borderRadius:3}}/></div>
+              <div style={{fontFamily:'ui-monospace,monospace',fontSize:13,fontWeight:700,color:s.r>70?'#dc2626':'#475569',width:40,textAlign:'right'}}>{s.r}%</div>
+              <Btn variant="secondary" icon="message-square">Contacter</Btn>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  </div>
+);
+
+function App() {
+  const [view,setView] = useState('studio');
+  useEffect(()=>{ const id=setTimeout(()=>window.lucide&&window.lucide.createIcons(),50); return ()=>clearTimeout(id); });
+  return (<div style={{display:'flex',height:'100vh'}} data-screen-label={view==='studio'?'01 Studio de cours':'02 Radar de classe'}>
+    <Sidebar active={view} onNav={setView}/>
+    <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0}}>
+      <header style={{height:56,padding:'0 24px',display:'flex',alignItems:'center',gap:16,borderBottom:'1px solid #f1f5f9',background:'rgba(255,255,255,0.8)',backdropFilter:'blur(8px)',flexShrink:0}}>
+        <h2 style={{margin:0,fontWeight:700,fontSize:18,background:'linear-gradient(90deg,#2563eb,#06b6d4,#f97316)',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent'}}>{view==='studio'?'Studio de cours':view==='radar'?'Radar de classe':view==='classes'?'Mes classes':'Outils'}</h2>
+        <div style={{flex:1}}/>
+        <div style={{width:32,height:32,borderRadius:'50%',background:'#a855f7',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12}}>JL</div>
+      </header>
+      {view==='studio'?<Studio/>:<Radar/>}
+    </div>
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

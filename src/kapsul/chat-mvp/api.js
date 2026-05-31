@@ -123,7 +123,7 @@ export async function getSession(sessionId) {
   return res.json();
 }
 
-export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = [], mode = 'tuteur') {
+export function streamChat(sessionId, message, history, { onToken, onDone, onError, onSources }, enabledSources = [], mode = 'explication') {
   let streamFinished = false;
   const finish = () => {
     if (streamFinished) return;
@@ -284,7 +284,7 @@ export async function startLibrarySession(documentIds) {
 
 export function streamLibraryChat(sessionId, message, history,
                                    { onToken, onDone, onError, onSources },
-                                   enabledSources = [], mode = 'tuteur') {
+                                   enabledSources = [], mode = 'explication') {
   let streamFinished = false;
   const finish = () => {
     if (streamFinished) return;

@@ -25,6 +25,27 @@ export const KapsulIcons = (() => {
     Check: I(<><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>),
     Users: I(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>),
     Canva: I(<><circle cx="12" cy="12" r="9"/><path d="M15 9.5a4 4 0 1 0 0 5"/></>),
+    Word: (props) => (
+      <span
+        style={{
+          width: props.size || 17,
+          height: props.size || 17,
+          borderRadius: 3,
+          background: '#2563EB',
+          color: '#fff',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          fontSize: (props.size || 17) * 0.58,
+          fontFamily: '"DM Sans", system-ui, sans-serif',
+          flexShrink: 0,
+          lineHeight: 1,
+        }}
+      >
+        W
+      </span>
+    ),
     Slides: I(<><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>),
     Sheet: I(<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></>),
     Cloud: I(<path d="M18 10a6 6 0 0 0-11.6-2A4 4 0 0 0 7 16h11a4 4 0 0 0 0-6z"/>),
@@ -51,6 +72,11 @@ export const KapsulIcons = (() => {
     Database: I(<><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/></>),
     More: I(<><circle cx="12" cy="6" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18" r="1"/></>),
     Arrow: I(<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>),
+    Play: (props) => (
+      <svg viewBox="0 0 24 24" width={props.size || 18} height={props.size || 18} fill="currentColor" {...props}>
+        <polygon points="5 3 19 12 5 21 5 3" />
+      </svg>
+    ),
     Chevron: I(<polyline points="9 18 15 12 9 6"/>),
     ShieldCheck: I(<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>),
     Lock: I(<><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>),

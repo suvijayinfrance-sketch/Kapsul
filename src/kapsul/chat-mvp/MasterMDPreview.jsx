@@ -41,14 +41,20 @@ export function MasterMDPreview({ k, isV2, masterMD, onClose, mobile, lang = 'fr
           )}
         </div>
       </div>
-      <div
-        className="kapsul-mvp-md"
-        style={{
-          flex: 1, overflowY: 'auto', padding: 16,
-          '--mvp-border': k.border,
-        }}
-      >
-        <ReactMarkdown>{masterMD}</ReactMarkdown>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <div
+          className="kapsul-mvp-md"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid #E5E7EB',
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.06)',
+            borderRadius: 16,
+            padding: 16,
+            '--mvp-border': k.border,
+          }}
+        >
+          <ReactMarkdown>{masterMD}</ReactMarkdown>
+        </div>
       </div>
     </div>
   );

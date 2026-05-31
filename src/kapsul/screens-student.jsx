@@ -10,9 +10,10 @@ const iconBtn = (k) => ({
 });
 
 const panelCard = (k, isV2) => ({
-  background: isV2 ? k.surface : '#fff',
-  border: `1px solid ${k.border}`,
-  borderRadius: k.radius.card,
+  background: isV2 ? k.surface : '#FFFFFF',
+  border: isV2 ? `1px solid ${k.border}` : '1px solid #E5E7EB',
+  borderRadius: isV2 ? k.radius.card : 16,
+  boxShadow: isV2 ? 'none' : '0 4px 14px rgba(15, 23, 42, 0.06)',
   overflow: 'hidden',
 });
 
